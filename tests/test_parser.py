@@ -1,7 +1,7 @@
 import itertools
 
 import pytest
-from protocol.parser import ErrorEvent, Event, Operation, Parser, State
+from protocol.parser import ErrorEvent, Event, MsgEvent, Operation, Parser, State
 
 
 def parse_text(data: str) -> tuple[list[State], list[Event]]:
@@ -87,6 +87,63 @@ class TestParserBasic:
         ]
         assert events == [
             ErrorEvent(operation=Operation.ERR, message="this is the error message"),
+        ]
+
+    @pytest.mark.parametrize(
+        "data", fuzz_case("msg", " the.subject 1234 12\r\nhello world!\r\n")
+    )
+    def test_parse_msg(self, data: str):
+        history, events = parse_text(data)
+        assert history == [
+            State.OP_START,
+            State.OP_M,
+            State.OP_MS,
+            State.OP_MSG,
+            State.OP_MSG_SPC,
+            State.MSG_ARG,
+            State.MSG_END,
+            State.MSG_PAYLOAD,
+            State.OP_END,
+            State.OP_START,
+        ]
+        assert events == [
+            MsgEvent(
+                operation=Operation.MSG,
+                sid=1234,
+                subject="the.subject",
+                reply_to="",
+                payload_size=12,
+                payload=b"hello world!",
+            ),
+        ]
+
+    @pytest.mark.parametrize(
+        "data",
+        fuzz_case("msg", " the.subject 1234 the.reply.subject 12\r\nhello world!\r\n"),
+    )
+    def test_parse_msg_with_reply(self, data: str):
+        history, events = parse_text(data)
+        assert history == [
+            State.OP_START,
+            State.OP_M,
+            State.OP_MS,
+            State.OP_MSG,
+            State.OP_MSG_SPC,
+            State.MSG_ARG,
+            State.MSG_END,
+            State.MSG_PAYLOAD,
+            State.OP_END,
+            State.OP_START,
+        ]
+        assert events == [
+            MsgEvent(
+                operation=Operation.MSG,
+                sid=1234,
+                subject="the.subject",
+                reply_to="the.reply.subject",
+                payload_size=12,
+                payload=b"hello world!",
+            ),
         ]
 
 

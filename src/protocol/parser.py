@@ -118,6 +118,17 @@ class ErrorEvent(Event):
     message: str
 
 
+@dataclass
+class MsgEvent(Event):
+    """NATS Protocol message event."""
+
+    sid: int
+    subject: str
+    reply_to: str
+    payload_size: int
+    payload: bytes
+
+
 class Parser:
     """NATS Protocol parser."""
 
@@ -135,6 +146,9 @@ class Parser:
         )
         self._events: list[Event] = []
         self._error_message = ""
+        # Raw fields
+        self._msg_args = b""
+        self._pending_msg: MsgEvent | None = None
         # Initialize the parser state.
         self._history.append(State.OP_START)
 
@@ -155,12 +169,15 @@ class Parser:
     def parse(self, data: bytes) -> None:
         """Parse some bytes."""
 
-        for idx in range(len(data)):
-            value = data[idx]
+        while data:
+            value = data[0]
+            data = data[1:]
             state = self._history[-1]
 
             if state == State.OP_START:
-                if value == Character.p or value == Character.P:
+                if value == Character.m or value == Character.M:
+                    self._history.append(State.OP_M)
+                elif value == Character.p or value == Character.P:
                     self._history.append(State.OP_P)
                 elif value == Character.plus:
                     self._history.append(State.OP_PLUS)
@@ -168,6 +185,89 @@ class Parser:
                     self._history.append(State.OP_MINUS)
                 else:
                     raise ProtocolError(value, data)
+
+            elif state == State.OP_M:
+                if value == Character.s or value == Character.S:
+                    self._history.append(State.OP_MS)
+                else:
+                    raise ProtocolError(value, data)
+
+            elif state == State.OP_MS:
+                if value == Character.g or value == Character.G:
+                    self._history.append(State.OP_MSG)
+                else:
+                    raise ProtocolError(value, data)
+
+            elif state == State.OP_MSG:
+                if value == Character.space:
+                    self._history.append(State.OP_MSG_SPC)
+                else:
+                    raise ProtocolError(value, data)
+
+            elif state == State.OP_MSG_SPC:
+                if value == Character.carriage_return:
+                    raise ProtocolError(value, data)
+                elif value == Character.newline:
+                    raise ProtocolError(value, data)
+                elif value == Character.space:
+                    raise ProtocolError(value, data)
+                else:
+                    self._msg_args += bytes([value])
+                    self._history.append(State.MSG_ARG)
+
+            elif state == State.MSG_ARG:
+                if value == Character.carriage_return:
+                    self._history.append(State.MSG_END)
+                    args = self._msg_args.decode("utf-8").split(" ")
+                    nbargs = len(args)
+                    if nbargs == 4:
+                        subject, raw_sid, reply_to, raw_payload_size = args
+                    elif nbargs == 3:
+                        reply_to = ""
+                        subject, raw_sid, raw_payload_size = args
+                    else:
+                        raise ProtocolError(value, data)
+                    try:
+                        sid = int(raw_sid)
+                        payload_size = int(raw_payload_size)
+                    except Exception as e:
+                        raise ProtocolError(value, data) from e
+                    self._pending_msg = MsgEvent(
+                        Operation.MSG,
+                        sid=sid,
+                        subject=subject,
+                        reply_to=reply_to,
+                        payload_size=payload_size,
+                        payload=b"",
+                    )
+                    self._msg_args = b""
+                elif value == Character.newline:
+                    raise ProtocolError(value, data)
+                else:
+                    self._msg_args += bytes([value])
+
+            elif state == State.MSG_END:
+                if value == Character.newline:
+                    self._history.append(State.MSG_PAYLOAD)
+                else:
+                    raise ProtocolError(value, data)
+
+            elif state == State.MSG_PAYLOAD:
+                assert self._pending_msg is not None, "pending_msg is None"
+                if len(data) >= self._pending_msg.payload_size + 1:
+                    self._pending_msg.payload = (
+                        bytes([value]) + data[: self._pending_msg.payload_size - 1]
+                    )
+                    data = data[self._pending_msg.payload_size - 1 :]
+                    self._events.append(self._pending_msg)
+                    if data[0] == Character.carriage_return:
+                        data = data[1:]
+                        self._history.append(State.OP_END)
+                    else:
+                        raise ProtocolError(value, data)
+                    self._pending_msg = None
+                else:
+                    return
 
             elif state == State.OP_PLUS:
                 if value == Character.o or value == Character.O:
