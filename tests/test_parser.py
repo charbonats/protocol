@@ -3,22 +3,27 @@ import itertools
 from protocol.parser import Parser, State, Event, Operation
 
 
-def combinations(string: str, suffix: str) -> list[str]:
-    return map(
-        lambda values: "".join(values) + suffix,
-        itertools.product(*zip(string.upper(), string.lower())),
+def parse_text(data: str) -> tuple[list[State], list[Event]]:
+    parser = Parser(history=-1)
+    parser.parse(data.encode("ascii"))
+    return parser.history(), parser.events()
+
+
+def fuzz_case(string: str) -> list[str]:
+    return list(
+        set(
+            map(
+                "".join,
+                itertools.product(*zip(string.upper(), string.lower())),
+            )
+        )
     )
 
 
-class TestParser:
-    def parse(self, data: bytes) -> tuple[list[State], list[Event]]:
-        parser = Parser(history=-1)
-        parser.parse(data)
-        return parser.history(), parser.events()
-
-    @pytest.mark.parametrize("data", combinations("ping", "\r\n"))
+class TestParserBasic:
+    @pytest.mark.parametrize("data", fuzz_case("ping\r\n"))
     def test_parse_ping(self, data: str):
-        history, events = self.parse(data.encode("ascii"))
+        history, events = parse_text(data)
         assert history == [
             State.OP_START,
             State.OP_P,
@@ -32,9 +37,9 @@ class TestParser:
             Event(operation=Operation.PING),
         ]
 
-    @pytest.mark.parametrize("data", combinations("pong", "\r\n"))
+    @pytest.mark.parametrize("data", fuzz_case("pong\r\n"))
     def test_parse_pong(self, data: str):
-        history, events = self.parse(data.encode())
+        history, events = parse_text(data)
         assert history == [
             State.OP_START,
             State.OP_P,
@@ -48,9 +53,11 @@ class TestParser:
             Event(operation=Operation.PONG),
         ]
 
-    def test_parse_ping_pong(self):
-        data = "ping\r\npong\r\n".encode()
-        history, events = self.parse(data)
+
+class TestParserAdvanced:
+    @pytest.mark.parametrize("data", fuzz_case("ping\r\npong\r\n"))
+    def test_parse_ping_pong(self, data: str):
+        history, events = parse_text(data)
         assert history == [
             State.OP_START,
             State.OP_P,
