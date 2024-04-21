@@ -47,3 +47,26 @@ class TestParser:
         assert events == [
             Event(operation=Operation.PONG),
         ]
+
+    def test_parse_ping_pong(self):
+        data = "ping\r\npong\r\n".encode()
+        history, events = self.parse(data)
+        assert history == [
+            State.OP_START,
+            State.OP_P,
+            State.OP_PI,
+            State.OP_PIN,
+            State.OP_PING,
+            State.OP_END,
+            State.OP_START,
+            State.OP_P,
+            State.OP_PO,
+            State.OP_PON,
+            State.OP_PONG,
+            State.OP_END,
+            State.OP_START,
+        ]
+        assert events == [
+            Event(operation=Operation.PING),
+            Event(operation=Operation.PONG),
+        ]
