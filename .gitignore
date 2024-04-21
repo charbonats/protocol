@@ -6,5 +6,16 @@ dist/
 wheels/
 *.egg-info
 
+# Coverage
+.coverage
+htmlcov
+html-coverage
+
+# VSCode
+.vscode
+
 # venv
 .venv
+
+# MacOS
+.DS_Store
