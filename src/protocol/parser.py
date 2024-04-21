@@ -1,16 +1,16 @@
 """protocol.parser module."""
 
-from dataclasses import dataclass
 from collections import deque
+from dataclasses import dataclass
 from enum import IntEnum, auto
 
 
 class ProtocolError(Exception):
     """Protocol error."""
 
-    def __init__(self, message: str, bad_value: bytes) -> None:
+    def __init__(self, invalid_byte: int, bad_value: bytes) -> None:
         self.bad_value = bad_value
-        super().__init__(message)
+        super().__init__(f"unexpected byte: {bytes([invalid_byte])}")
 
 
 class State(IntEnum):
@@ -111,6 +111,13 @@ class Event:
     operation: Operation
 
 
+@dataclass
+class ErrorEvent(Event):
+    """NATS Protocol error event."""
+
+    message: str
+
+
 class Parser:
     """NATS Protocol parser."""
 
@@ -127,6 +134,7 @@ class Parser:
             maxlen=history + 1 if history >= 0 else None
         )
         self._events: list[Event] = []
+        self._error_message = ""
         # Initialize the parser state.
         self._history.append(State.OP_START)
 
@@ -156,29 +164,79 @@ class Parser:
                     self._history.append(State.OP_P)
                 elif value == Character.plus:
                     self._history.append(State.OP_PLUS)
+                elif value == Character.minus:
+                    self._history.append(State.OP_MINUS)
                 else:
-                    raise ProtocolError(
-                        f"unexpected byte: {data[idx:idx+1]}", bad_value=data
-                    )
+                    raise ProtocolError(value, data)
 
             elif state == State.OP_PLUS:
                 if value == Character.o or value == Character.O:
                     self._history.append(State.OP_PLUS_O)
                 else:
-                    raise ProtocolError(f"unexpected byte: {value}", bad_value=data)
+                    raise ProtocolError(value, data)
 
             elif state == State.OP_PLUS_O:
                 if value == Character.k or value == Character.K:
                     self._history.append(State.OP_PLUS_OK)
                 else:
-                    raise ProtocolError(f"unexpected byte: {value}", bad_value=data)
+                    raise ProtocolError(value, data)
 
             elif state == State.OP_PLUS_OK:
                 if value == Character.carriage_return:
                     self._history.append(State.OP_END)
                     self._events.append(Event(Operation.OK))
                 else:
-                    raise ProtocolError(f"unexpected byte: {value}", bad_value=data)
+                    raise ProtocolError(value, data)
+
+            elif state == State.OP_MINUS:
+                if value == Character.e or value == Character.E:
+                    self._history.append(State.OP_MINUS_E)
+                else:
+                    raise ProtocolError(value, data)
+
+            elif state == State.OP_MINUS_E:
+                if value == Character.r or value == Character.R:
+                    self._history.append(State.OP_MINUS_ER)
+                else:
+                    raise ProtocolError(value, data)
+
+            elif state == State.OP_MINUS_ER:
+                if value == Character.r or value == Character.R:
+                    self._history.append(State.OP_MINUS_ERR)
+                else:
+                    raise ProtocolError(value, data)
+
+            elif state == State.OP_MINUS_ERR:
+                if value == Character.space:
+                    self._history.append(State.OP_MINUS_ERR_SPC)
+                else:
+                    raise ProtocolError(value, data)
+
+            elif state == State.OP_MINUS_ERR_SPC:
+                if value == Character.carriage_return:
+                    raise ProtocolError(value, data)
+                elif value == Character.newline:
+                    raise ProtocolError(value, data)
+                else:
+                    try:
+                        self._error_message += chr(value)
+                    except Exception:
+                        raise ProtocolError(value, data)
+                    self._history.append(State.MINUS_ERR_ARG)
+
+            elif state == State.MINUS_ERR_ARG:
+                if value == Character.carriage_return:
+                    msg = self._error_message
+                    self._history.append(State.OP_END)
+                    self._events.append(ErrorEvent(Operation.ERR, msg))
+                    self._error_message = ""
+                elif value == Character.newline:
+                    raise ProtocolError(value, data)
+                else:
+                    try:
+                        self._error_message += chr(value)
+                    except Exception:
+                        raise ProtocolError(value, data)
 
             elif state == State.OP_P:
                 if value == Character.i or value == Character.I:
@@ -186,51 +244,51 @@ class Parser:
                 elif value == Character.o or value == Character.O:
                     self._history.append(State.OP_PO)
                 else:
-                    raise ProtocolError(f"unexpected byte: {value}", bad_value=data)
+                    raise ProtocolError(value, data)
 
             elif state == State.OP_PI:
                 if value == Character.n or value == Character.N:
                     self._history.append(State.OP_PIN)
                 else:
-                    raise ProtocolError(f"unexpected byte: {value}", bad_value=data)
+                    raise ProtocolError(value, data)
 
             elif state == State.OP_PIN:
                 if value == Character.g or value == Character.G:
                     self._history.append(State.OP_PING)
                 else:
-                    raise ProtocolError(f"unexpected byte: {value}", bad_value=data)
+                    raise ProtocolError(value, data)
 
             elif state == State.OP_PING:
                 if value == Character.carriage_return:
                     self._history.append(State.OP_END)
                     self._events.append(Event(Operation.PING))
                 else:
-                    raise ProtocolError(f"unexpected byte: {value}", bad_value=data)
+                    raise ProtocolError(value, data)
 
             elif state == State.OP_PO:
                 if value == Character.n or value == Character.N:
                     self._history.append(State.OP_PON)
                 else:
-                    raise ProtocolError(f"unexpected byte: {value}", bad_value=data)
+                    raise ProtocolError(value, data)
 
             elif state == State.OP_PON:
                 if value == Character.g or value == Character.G:
                     self._history.append(State.OP_PONG)
                 else:
-                    raise ProtocolError(f"unexpected byte: {value}", bad_value=data)
+                    raise ProtocolError(value, data)
 
             elif state == State.OP_PONG:
                 if value == Character.carriage_return:
                     self._history.append(State.OP_END)
                     self._events.append(Event(Operation.PONG))
                 else:
-                    raise ProtocolError(f"unexpected byte: {value}", bad_value=data)
+                    raise ProtocolError(value, data)
 
             elif state == State.OP_END:
                 if value == Character.newline:
                     self._history.append(State.OP_START)
                 else:
-                    raise ProtocolError(f"unexpected byte: {value}", bad_value=data)
+                    raise ProtocolError(value, data)
 
             else:
-                raise ProtocolError(f"unexpected state: {state}", bad_value=data)
+                raise ProtocolError(value, data)

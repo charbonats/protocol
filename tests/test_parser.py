@@ -1,6 +1,7 @@
-import pytest
 import itertools
-from protocol.parser import Parser, State, Event, Operation
+
+import pytest
+from protocol.parser import ErrorEvent, Event, Operation, Parser, State
 
 
 def parse_text(data: str) -> tuple[list[State], list[Event]]:
@@ -9,11 +10,11 @@ def parse_text(data: str) -> tuple[list[State], list[Event]]:
     return parser.history(), parser.events()
 
 
-def fuzz_case(string: str) -> list[str]:
+def fuzz_case(string: str, suffix: str | None = None) -> list[str]:
     return list(
         set(
             map(
-                "".join,
+                lambda parts: "".join(parts) + suffix if suffix else "".join(parts),
                 itertools.product(*zip(string.upper(), string.lower())),
             )
         )
@@ -21,7 +22,7 @@ def fuzz_case(string: str) -> list[str]:
 
 
 class TestParserBasic:
-    @pytest.mark.parametrize("data", fuzz_case("ping\r\n"))
+    @pytest.mark.parametrize("data", fuzz_case("ping", "\r\n"))
     def test_parse_ping(self, data: str):
         history, events = parse_text(data)
         assert history == [
@@ -37,7 +38,7 @@ class TestParserBasic:
             Event(operation=Operation.PING),
         ]
 
-    @pytest.mark.parametrize("data", fuzz_case("pong\r\n"))
+    @pytest.mark.parametrize("data", fuzz_case("pong", "\r\n"))
     def test_parse_pong(self, data: str):
         history, events = parse_text(data)
         assert history == [
@@ -53,7 +54,7 @@ class TestParserBasic:
             Event(operation=Operation.PONG),
         ]
 
-    @pytest.mark.parametrize("data", fuzz_case("+ok\r\n"))
+    @pytest.mark.parametrize("data", fuzz_case("+ok", "\r\n"))
     def test_parse_ok(self, data: str):
         history, events = parse_text(data)
         assert history == [
@@ -66,6 +67,26 @@ class TestParserBasic:
         ]
         assert events == [
             Event(operation=Operation.OK),
+        ]
+
+    @pytest.mark.parametrize(
+        "data", fuzz_case("-err", " this is the error message\r\n")
+    )
+    def test_parse_err(self, data: str):
+        history, events = parse_text(data)
+        assert history == [
+            State.OP_START,
+            State.OP_MINUS,
+            State.OP_MINUS_E,
+            State.OP_MINUS_ER,
+            State.OP_MINUS_ERR,
+            State.OP_MINUS_ERR_SPC,
+            State.MINUS_ERR_ARG,
+            State.OP_END,
+            State.OP_START,
+        ]
+        assert events == [
+            ErrorEvent(operation=Operation.ERR, message="this is the error message"),
         ]
 
 
