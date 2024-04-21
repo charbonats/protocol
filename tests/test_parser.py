@@ -53,6 +53,21 @@ class TestParserBasic:
             Event(operation=Operation.PONG),
         ]
 
+    @pytest.mark.parametrize("data", fuzz_case("+ok\r\n"))
+    def test_parse_ok(self, data: str):
+        history, events = parse_text(data)
+        assert history == [
+            State.OP_START,
+            State.OP_PLUS,
+            State.OP_PLUS_O,
+            State.OP_PLUS_OK,
+            State.OP_END,
+            State.OP_START,
+        ]
+        assert events == [
+            Event(operation=Operation.OK),
+        ]
+
 
 class TestParserAdvanced:
     @pytest.mark.parametrize("data", fuzz_case("ping\r\npong\r\n"))

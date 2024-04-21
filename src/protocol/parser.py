@@ -154,10 +154,31 @@ class Parser:
             if state == State.OP_START:
                 if value == Character.p or value == Character.P:
                     self._history.append(State.OP_P)
+                elif value == Character.plus:
+                    self._history.append(State.OP_PLUS)
                 else:
                     raise ProtocolError(
-                        f"unexpected byte: {value} ({data=})", bad_value=data
+                        f"unexpected byte: {data[idx:idx+1]}", bad_value=data
                     )
+
+            elif state == State.OP_PLUS:
+                if value == Character.o or value == Character.O:
+                    self._history.append(State.OP_PLUS_O)
+                else:
+                    raise ProtocolError(f"unexpected byte: {value}", bad_value=data)
+
+            elif state == State.OP_PLUS_O:
+                if value == Character.k or value == Character.K:
+                    self._history.append(State.OP_PLUS_OK)
+                else:
+                    raise ProtocolError(f"unexpected byte: {value}", bad_value=data)
+
+            elif state == State.OP_PLUS_OK:
+                if value == Character.carriage_return:
+                    self._history.append(State.OP_END)
+                    self._events.append(Event(Operation.OK))
+                else:
+                    raise ProtocolError(f"unexpected byte: {value}", bad_value=data)
 
             elif state == State.OP_P:
                 if value == Character.i or value == Character.I:
