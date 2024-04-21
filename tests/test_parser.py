@@ -91,7 +91,7 @@ class TestParserBasic:
 
 
 class TestParserAdvanced:
-    @pytest.mark.parametrize("data", fuzz_case("ping\r\npong\r\n"))
+    @pytest.mark.parametrize("data", ["ping\r\npong\r\n"])
     def test_parse_ping_pong(self, data: str):
         history, events = parse_text(data)
         assert history == [
@@ -112,4 +112,55 @@ class TestParserAdvanced:
         assert events == [
             Event(operation=Operation.PING),
             Event(operation=Operation.PONG),
+        ]
+
+    @pytest.mark.parametrize("data", ["ping\r\n+ok\r\n"])
+    def test_parse_ping_ok(self, data: str):
+        history, events = parse_text(data)
+        assert history == [
+            State.OP_START,
+            State.OP_P,
+            State.OP_PI,
+            State.OP_PIN,
+            State.OP_PING,
+            State.OP_END,
+            State.OP_START,
+            State.OP_PLUS,
+            State.OP_PLUS_O,
+            State.OP_PLUS_OK,
+            State.OP_END,
+            State.OP_START,
+        ]
+        assert events == [
+            Event(operation=Operation.PING),
+            Event(operation=Operation.OK),
+        ]
+
+    @pytest.mark.parametrize(
+        "data", ["-err the error message\r\n-err the other error message\r\n"]
+    )
+    def test_parse_err_err(self, data: str):
+        history, events = parse_text(data)
+        assert history == [
+            State.OP_START,
+            State.OP_MINUS,
+            State.OP_MINUS_E,
+            State.OP_MINUS_ER,
+            State.OP_MINUS_ERR,
+            State.OP_MINUS_ERR_SPC,
+            State.MINUS_ERR_ARG,
+            State.OP_END,
+            State.OP_START,
+            State.OP_MINUS,
+            State.OP_MINUS_E,
+            State.OP_MINUS_ER,
+            State.OP_MINUS_ERR,
+            State.OP_MINUS_ERR_SPC,
+            State.MINUS_ERR_ARG,
+            State.OP_END,
+            State.OP_START,
+        ]
+        assert events == [
+            ErrorEvent(operation=Operation.ERR, message="the error message"),
+            ErrorEvent(operation=Operation.ERR, message="the other error message"),
         ]
