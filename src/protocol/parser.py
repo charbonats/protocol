@@ -1,11 +1,12 @@
 """protocol.parser module."""
 
+from __future__ import annotations
+
+import json
 from collections import deque
 from dataclasses import dataclass
 from enum import IntEnum, auto
 from typing import Iterator
-
-CRLF_SIZE = len(b"\r\n")
 
 
 class ProtocolError(Exception):
@@ -140,6 +141,75 @@ class MsgEvent(Event):
     header: bytes
 
 
+@dataclass
+class Version:
+    major: int
+    minor: int
+    patch: int
+    dev: str
+
+    def as_string(self) -> str:
+        return f"{self.major}.{self.minor}.{self.patch}-{self.dev}"
+
+    def __eq__(self, other: "Version") -> bool:
+        if not isinstance(other, Version):
+            return False
+        return (
+            self.major == other.major
+            and self.minor == other.minor
+            and self.patch == other.patch
+            and self.dev == other.dev
+        )
+
+    def __gt__(self, other: "Version") -> bool:
+        if not isinstance(other, Version):
+            raise TypeError("unorderable types: Version() > {}".format(type(other)))
+        if self.major > other.major:
+            return True
+        if self.major == other.major:
+            if self.minor > other.minor:
+                return True
+            if self.minor == other.minor:
+                if self.patch > other.patch:
+                    return True
+                if self.patch == other.patch:
+                    return self.dev > other.dev
+        return False
+
+
+@dataclass
+class InfoEvent(Event):
+    proto: int
+    server_id: str
+    server_name: str
+    version: Version
+    go: str
+    host: str
+    port: int
+    max_payload: int | None
+    headers: bool | None
+    client_id: int | None
+    auth_required: bool | None
+    tls_required: bool | None
+    tls_verify: bool | None
+    tls_available: bool | None
+    connect_urls: list[str] | None
+    ws_connect_urls: list[str] | None
+    ldm: bool | None
+    git_commit: str | None
+    jetstream: bool | None
+    ip: str | None
+    client_ip: str | None
+    nonce: str | None
+    cluster: str | None
+    domain: str | None
+    xkey: str | None
+
+
+CRLF = bytes([Character.carriage_return, Character.newline])
+CRLF_SIZE = len(CRLF)
+
+
 class Parser:
     """NATS Protocol parser."""
 
@@ -228,6 +298,9 @@ class Parser:
                     continue
                 elif next_byte == Character.p or next_byte == Character.P:
                     set_state(State.OP_P)
+                    continue
+                elif next_byte == Character.i or next_byte == Character.I:
+                    set_state(State.OP_I)
                     continue
                 elif next_byte == Character.plus:
                     set_state(State.OP_PLUS)
@@ -451,6 +524,65 @@ class Parser:
                     yield None
                     continue
 
+            elif state == State.OP_I:
+                if next_byte == Character.n or next_byte == Character.N:
+                    set_state(State.OP_IN)
+                    continue
+                else:
+                    raise ProtocolError(next_byte, pending_data)
+
+            elif state == State.OP_IN:
+                if next_byte == Character.f or next_byte == Character.F:
+                    set_state(State.OP_INF)
+                    continue
+                else:
+                    raise ProtocolError(next_byte, pending_data)
+
+            elif state == State.OP_INF:
+                if next_byte == Character.o or next_byte == Character.O:
+                    set_state(State.OP_INFO)
+                    continue
+                else:
+                    raise ProtocolError(next_byte, pending_data)
+
+            elif state == State.OP_INFO:
+                if next_byte == Character.space:
+                    set_state(State.OP_INFO_SPC)
+                    continue
+                else:
+                    raise ProtocolError(next_byte, pending_data)
+
+            elif state == State.OP_INFO_SPC:
+                set_state(State.INFO_ARG)
+                pending = bytes([next_byte]) + pending_data
+                if CRLF in pending:
+                    end = pending.index(CRLF)
+                    data = pending[:end]
+                    self._data = pending[end + CRLF_SIZE :]
+                    set_state(State.OP_END)
+                    set_state(State.OP_START)
+                    self._events.append(parse_info(data))
+                    continue
+                else:
+                    self._data = pending
+                    yield None
+                    continue
+
+            elif state == State.INFO_ARG:
+                pending = bytes([next_byte]) + pending_data
+                if CRLF in pending:
+                    end = pending.index(CRLF)
+                    data = pending[:end]
+                    self._data = pending[end + CRLF_SIZE :]
+                    set_state(State.OP_END)
+                    set_state(State.OP_START)
+                    self._events.append(parse_info(data))
+                    continue
+                else:
+                    self._data = pending
+                    yield None
+                    continue
+
             elif state == State.OP_PLUS:
                 if next_byte == Character.o or next_byte == Character.O:
                     set_state(State.OP_PLUS_O)
@@ -591,3 +723,51 @@ class Parser:
 
             else:
                 raise ProtocolError(next_byte, pending_data)
+
+
+def parse_info(data: bytes) -> InfoEvent:
+    raw_info = json.loads(data.decode())
+    return InfoEvent(
+        operation=Operation.INFO,
+        server_id=raw_info["server_id"],
+        server_name=raw_info["server_name"],
+        version=parse_version(raw_info["version"]),
+        go=raw_info["go"],
+        host=raw_info["host"],
+        port=raw_info["port"],
+        headers=raw_info["headers"],
+        proto=raw_info["proto"],
+        max_payload=raw_info.get("max_payload"),
+        client_id=raw_info.get("client_id"),
+        auth_required=raw_info.get("auth_required"),
+        tls_required=raw_info.get("tls_required"),
+        tls_verify=raw_info.get("tls_verify"),
+        tls_available=raw_info.get("tls_available"),
+        connect_urls=raw_info.get("connect_urls"),
+        ws_connect_urls=raw_info.get("ws_connect_urls"),
+        ldm=raw_info.get("ldm"),
+        git_commit=raw_info.get("git_commit"),
+        jetstream=raw_info.get("jetstream"),
+        ip=raw_info.get("ip"),
+        client_ip=raw_info.get("client_ip"),
+        nonce=raw_info.get("nonce"),
+        cluster=raw_info.get("cluster"),
+        domain=raw_info.get("domain"),
+        xkey=raw_info.get("xkey"),
+    )
+
+
+def parse_version(version: str) -> Version:
+    semver = Version(0, 0, 0, "")
+    v = version.split("-")
+    if len(v) > 1:
+        semver.dev = v[1]
+    tokens = v[0].split(".")
+    n = len(tokens)
+    if n > 1:
+        semver.major = int(tokens[0])
+    if n > 2:
+        semver.minor = int(tokens[1])
+    if n > 3:
+        semver.patch = int(tokens[2])
+    return semver
