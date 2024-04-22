@@ -89,6 +89,56 @@ class TestParserBasic:
             ErrorEvent(operation=Operation.ERR, message="this is the error message"),
         ]
 
+    def test_parse_msg_with_empty_payload(self):
+        history, events = parse_text("msg the.subject 1234 0\r\n\r\n")
+        assert history == [
+            State.OP_START,
+            State.OP_M,
+            State.OP_MS,
+            State.OP_MSG,
+            State.OP_MSG_SPC,
+            State.MSG_ARG,
+            State.MSG_END,
+            State.MSG_PAYLOAD,
+            State.OP_END,
+            State.OP_START,
+        ]
+        assert events == [
+            MsgEvent(
+                operation=Operation.MSG,
+                sid=1234,
+                subject="the.subject",
+                reply_to="",
+                payload=b"",
+                header=b"",
+            ),
+        ]
+
+    def test_parse_msg_with_reply_and_empty_payload(self):
+        history, events = parse_text("msg the.subject 1234 the.reply.subject 0\r\n\r\n")
+        assert history == [
+            State.OP_START,
+            State.OP_M,
+            State.OP_MS,
+            State.OP_MSG,
+            State.OP_MSG_SPC,
+            State.MSG_ARG,
+            State.MSG_END,
+            State.MSG_PAYLOAD,
+            State.OP_END,
+            State.OP_START,
+        ]
+        assert events == [
+            MsgEvent(
+                operation=Operation.MSG,
+                sid=1234,
+                subject="the.subject",
+                reply_to="the.reply.subject",
+                payload=b"",
+                header=b"",
+            ),
+        ]
+
     @pytest.mark.parametrize(
         "data", fuzz_case("msg", " the.subject 1234 12\r\nhello world!\r\n")
     )
@@ -143,6 +193,60 @@ class TestParserBasic:
                 reply_to="the.reply.subject",
                 payload=b"hello world!",
                 header=b"",
+            ),
+        ]
+
+    def test_parse_hmsg_with_empty_header_and_empty_payload(self):
+        history, events = parse_text("hmsg the.subject 1234 4 4\r\n\r\n\r\n\r\n")
+        assert history == [
+            State.OP_START,
+            State.OP_H,
+            State.OP_HM,
+            State.OP_HMS,
+            State.OP_HMSG,
+            State.OP_HMSG_SPC,
+            State.HMSG_ARG,
+            State.HMSG_END,
+            State.HMSG_PAYLOAD,
+            State.OP_END,
+            State.OP_START,
+        ]
+        assert events == [
+            MsgEvent(
+                operation=Operation.HMSG,
+                sid=1234,
+                subject="the.subject",
+                reply_to="",
+                payload=b"",
+                header=b"",
+            ),
+        ]
+
+    def test_parse_hmsg_with_header_and_empty_payload(self):
+        history, events = parse_text(
+            "hmsg the.subject 1234 22 22\r\nNATS/1.0\r\nFoo: Bar\r\n\r\n\r\n"
+        )
+        assert history == [
+            State.OP_START,
+            State.OP_H,
+            State.OP_HM,
+            State.OP_HMS,
+            State.OP_HMSG,
+            State.OP_HMSG_SPC,
+            State.HMSG_ARG,
+            State.HMSG_END,
+            State.HMSG_PAYLOAD,
+            State.OP_END,
+            State.OP_START,
+        ]
+        assert events == [
+            MsgEvent(
+                operation=Operation.HMSG,
+                sid=1234,
+                subject="the.subject",
+                reply_to="",
+                payload=b"",
+                header=b"NATS/1.0\r\nFoo: Bar",
             ),
         ]
 
