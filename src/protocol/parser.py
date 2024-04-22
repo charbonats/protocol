@@ -3,6 +3,9 @@
 from collections import deque
 from dataclasses import dataclass
 from enum import IntEnum, auto
+from typing import Iterator
+
+CRLF_SIZE = len(b"\r\n")
 
 
 class ProtocolError(Exception):
@@ -10,6 +13,7 @@ class ProtocolError(Exception):
 
     def __init__(self, invalid_byte: int, bad_value: bytes) -> None:
         self.bad_value = bad_value
+        self.invalid_byte = invalid_byte
         super().__init__(f"unexpected byte: {bytes([invalid_byte])}")
 
 
@@ -32,6 +36,13 @@ class State(IntEnum):
     MSG_PAYLOAD = auto()
     MSG_END = auto()
     OP_H = auto()
+    OP_HM = auto()
+    OP_HMS = auto()
+    OP_HMSG = auto()
+    OP_HMSG_SPC = auto()
+    HMSG_ARG = auto()
+    HMSG_END = auto()
+    HMSG_PAYLOAD = auto()
     OP_P = auto()
     OP_PI = auto()
     OP_PIN = auto()
@@ -125,8 +136,8 @@ class MsgEvent(Event):
     sid: int
     subject: str
     reply_to: str
-    payload_size: int
     payload: bytes
+    header: bytes
 
 
 class Parser:
@@ -147,14 +158,21 @@ class Parser:
         self._events: list[Event] = []
         self._error_message = ""
         # Raw fields
-        self._msg_args = b""
+        self._header_size = 0
+        self._total_size = 0
         self._pending_msg: MsgEvent | None = None
+        self._pending_args = ""
         # Initialize the parser state.
         self._history.append(State.OP_START)
+        self._data = b""
+        self._closed = False
+        self.__loop__ = self.__parse__()
 
     def history(self) -> list[State]:
         """Return the history of states."""
-        return list(self._history)
+        if __debug__:
+            return list(self._history)
+        raise RuntimeError("history is only available in debug mode")
 
     def state(self) -> State:
         """Return the current state of the parser."""
@@ -167,228 +185,409 @@ class Parser:
         return events
 
     def parse(self, data: bytes) -> None:
+        self._data += data
+        next(self.__loop__)
+
+    def __parse__(self) -> Iterator[None]:
         """Parse some bytes."""
 
-        while data:
-            value = data[0]
-            data = data[1:]
-            state = self._history[-1]
+        if __debug__:
+            if not self._history:
+                raise AssertionError("history is empty")
+            if self._history[-1] != State.OP_START:
+                raise AssertionError("history is not in the start state")
 
+            def set_state(state: State) -> None:
+                self._history.append(state)
+        else:
+
+            def set_state(state: State) -> None:
+                self._history[-1] = state
+
+        # Infinite loop until the parser is closed.
+        while not self._closed:
+            # If there is no data to parse, yield None.
+            if not self._data:
+                yield None
+                continue
+            # Take the first byte
+            next_byte = self._data[0]
+            # Take the remaining data
+            pending_data = self._data = self._data[1:]
+            # Get the current state
+            state = self._history[-1]
+            # Parse the byte according to the current state
             if state == State.OP_START:
-                if value == Character.m or value == Character.M:
-                    self._history.append(State.OP_M)
-                elif value == Character.p or value == Character.P:
-                    self._history.append(State.OP_P)
-                elif value == Character.plus:
-                    self._history.append(State.OP_PLUS)
-                elif value == Character.minus:
-                    self._history.append(State.OP_MINUS)
+                if next_byte == Character.m or next_byte == Character.M:
+                    self._expect_headers = False
+                    set_state(State.OP_M)
+                    continue
+                elif next_byte == Character.h or next_byte == Character.H:
+                    self._expect_headers = True
+                    set_state(State.OP_H)
+                    continue
+                elif next_byte == Character.p or next_byte == Character.P:
+                    set_state(State.OP_P)
+                    continue
+                elif next_byte == Character.plus:
+                    set_state(State.OP_PLUS)
+                    continue
+                elif next_byte == Character.minus:
+                    set_state(State.OP_MINUS)
+                    continue
                 else:
-                    raise ProtocolError(value, data)
+                    raise ProtocolError(next_byte, pending_data)
+
+            elif state == State.OP_H:
+                if next_byte == Character.m or next_byte == Character.M:
+                    set_state(State.OP_HM)
+                    continue
+                else:
+                    raise ProtocolError(next_byte, pending_data)
+
+            elif state == State.OP_HM:
+                if next_byte == Character.s or next_byte == Character.S:
+                    set_state(State.OP_HMS)
+                    continue
+                else:
+                    raise ProtocolError(next_byte, pending_data)
+
+            elif state == State.OP_HMS:
+                if next_byte == Character.g or next_byte == Character.G:
+                    set_state(State.OP_HMSG)
+                    continue
+                else:
+                    raise ProtocolError(next_byte, pending_data)
+
+            elif state == State.OP_HMSG:
+                if next_byte == Character.space:
+                    set_state(State.OP_HMSG_SPC)
+                    continue
+                else:
+                    raise ProtocolError(next_byte, pending_data)
+
+            elif state == State.OP_HMSG_SPC:
+                if next_byte == Character.carriage_return:
+                    raise ProtocolError(next_byte, pending_data)
+                elif next_byte == Character.newline:
+                    raise ProtocolError(next_byte, pending_data)
+                elif next_byte == Character.space:
+                    raise ProtocolError(next_byte, pending_data)
+                else:
+                    try:
+                        self._pending_args += chr(next_byte)
+                    except Exception:
+                        raise ProtocolError(next_byte, pending_data)
+                    set_state(State.HMSG_ARG)
+                    continue
+
+            elif state == State.HMSG_ARG:
+                if next_byte == Character.carriage_return:
+                    args = self._pending_args.split(" ")
+                    self._pending_args = ""
+                    nbargs = len(args)
+                    if nbargs == 5:
+                        (
+                            subject,
+                            raw_sid,
+                            reply_to,
+                            raw_header_size,
+                            raw_total_size,
+                        ) = args
+                    elif nbargs == 4:
+                        reply_to = ""
+                        subject, raw_sid, raw_header_size, raw_total_size = args
+                    else:
+                        raise ProtocolError(next_byte, pending_data)
+                    try:
+                        self._header_size = int(raw_header_size)
+                        self._total_size = int(raw_total_size)
+                        sid = int(raw_sid)
+                    except Exception as e:
+                        raise ProtocolError(next_byte, pending_data) from e
+                    self._pending_msg = MsgEvent(
+                        Operation.HMSG,
+                        sid=sid,
+                        subject=subject,
+                        reply_to=reply_to,
+                        payload=b"",
+                        header=b"",
+                    )
+                    set_state(State.HMSG_END)
+                    continue
+                elif next_byte == Character.newline:
+                    raise ProtocolError(next_byte, pending_data)
+                else:
+                    try:
+                        self._pending_args += chr(next_byte)
+                    except Exception:
+                        raise ProtocolError(next_byte, pending_data)
+                    continue
+
+            elif state == State.HMSG_END:
+                if next_byte == Character.newline:
+                    set_state(State.HMSG_PAYLOAD)
+                    continue
+                else:
+                    raise ProtocolError(next_byte, pending_data)
+
+            elif state == State.HMSG_PAYLOAD:
+                assert self._pending_msg is not None, "pending_msg is None"
+                pending_data = bytes([next_byte]) + pending_data
+                if len(pending_data) >= self._total_size + CRLF_SIZE:
+                    msg = self._pending_msg
+                    self._pending_msg = None
+
+                    header = pending_data[: self._header_size]
+                    if header[-4:] != b"\r\n\r\n":
+                        raise ProtocolError(next_byte, pending_data)
+                    msg.header = header[:-4]
+
+                    payload = pending_data[self._header_size : self._total_size]
+                    msg.payload = payload
+                    self._data = pending_data[self._total_size + CRLF_SIZE :]
+                    self._events.append(msg)
+                    set_state(State.OP_END)
+                    set_state(State.OP_START)
+                    continue
+                else:
+                    self._data = pending_data
+                    yield None
+                    continue
 
             elif state == State.OP_M:
-                if value == Character.s or value == Character.S:
-                    self._history.append(State.OP_MS)
+                if next_byte == Character.s or next_byte == Character.S:
+                    set_state(State.OP_MS)
+                    continue
                 else:
-                    raise ProtocolError(value, data)
+                    raise ProtocolError(next_byte, pending_data)
 
             elif state == State.OP_MS:
-                if value == Character.g or value == Character.G:
-                    self._history.append(State.OP_MSG)
+                if next_byte == Character.g or next_byte == Character.G:
+                    set_state(State.OP_MSG)
+                    continue
                 else:
-                    raise ProtocolError(value, data)
+                    raise ProtocolError(next_byte, pending_data)
 
             elif state == State.OP_MSG:
-                if value == Character.space:
-                    self._history.append(State.OP_MSG_SPC)
+                if next_byte == Character.space:
+                    set_state(State.OP_MSG_SPC)
+                    continue
                 else:
-                    raise ProtocolError(value, data)
+                    raise ProtocolError(next_byte, pending_data)
 
             elif state == State.OP_MSG_SPC:
-                if value == Character.carriage_return:
-                    raise ProtocolError(value, data)
-                elif value == Character.newline:
-                    raise ProtocolError(value, data)
-                elif value == Character.space:
-                    raise ProtocolError(value, data)
+                if next_byte == Character.carriage_return:
+                    raise ProtocolError(next_byte, pending_data)
+                elif next_byte == Character.newline:
+                    raise ProtocolError(next_byte, pending_data)
+                elif next_byte == Character.space:
+                    raise ProtocolError(next_byte, pending_data)
                 else:
-                    self._msg_args += bytes([value])
-                    self._history.append(State.MSG_ARG)
+                    try:
+                        self._pending_args += chr(next_byte)
+                    except Exception:
+                        raise ProtocolError(next_byte, pending_data)
+                    set_state(State.MSG_ARG)
+                    continue
 
             elif state == State.MSG_ARG:
-                if value == Character.carriage_return:
-                    self._history.append(State.MSG_END)
-                    args = self._msg_args.decode("utf-8").split(" ")
+                if next_byte == Character.carriage_return:
+                    set_state(State.MSG_END)
+                    args = self._pending_args.split(" ")
                     nbargs = len(args)
+                    self._pending_args = ""
                     if nbargs == 4:
-                        subject, raw_sid, reply_to, raw_payload_size = args
+                        subject, raw_sid, reply_to, raw_total_size = args
                     elif nbargs == 3:
                         reply_to = ""
-                        subject, raw_sid, raw_payload_size = args
+                        subject, raw_sid, raw_total_size = args
                     else:
-                        raise ProtocolError(value, data)
+                        raise ProtocolError(next_byte, pending_data)
                     try:
                         sid = int(raw_sid)
-                        payload_size = int(raw_payload_size)
+                        self._total_size = int(raw_total_size)
                     except Exception as e:
-                        raise ProtocolError(value, data) from e
+                        raise ProtocolError(next_byte, pending_data) from e
                     self._pending_msg = MsgEvent(
                         Operation.MSG,
                         sid=sid,
                         subject=subject,
                         reply_to=reply_to,
-                        payload_size=payload_size,
                         payload=b"",
+                        header=b"",
                     )
-                    self._msg_args = b""
-                elif value == Character.newline:
-                    raise ProtocolError(value, data)
+                    continue
+                elif next_byte == Character.newline:
+                    raise ProtocolError(next_byte, pending_data)
                 else:
-                    self._msg_args += bytes([value])
+                    try:
+                        self._pending_args += chr(next_byte)
+                    except Exception:
+                        raise ProtocolError(next_byte, pending_data)
+                    continue
 
             elif state == State.MSG_END:
-                if value == Character.newline:
-                    self._history.append(State.MSG_PAYLOAD)
+                if next_byte == Character.newline:
+                    set_state(State.MSG_PAYLOAD)
+                    continue
                 else:
-                    raise ProtocolError(value, data)
+                    raise ProtocolError(next_byte, pending_data)
 
             elif state == State.MSG_PAYLOAD:
                 assert self._pending_msg is not None, "pending_msg is None"
-                data = self._pending_msg.payload + bytes([value]) + data
-                if len(data) >= self._pending_msg.payload_size + 2:
-                    self._pending_msg.payload = data[: self._pending_msg.payload_size]
-                    data = data[self._pending_msg.payload_size :]
-                    self._events.append(self._pending_msg)
-                    if data[0] == Character.carriage_return:
-                        data = data[1:]
-                        self._history.append(State.OP_END)
-                    else:
-                        raise ProtocolError(value, data)
+                pending_data = bytes([next_byte]) + pending_data
+                if len(pending_data) >= self._total_size + CRLF_SIZE:
+                    msg = self._pending_msg
                     self._pending_msg = None
+                    msg.payload = pending_data[: self._total_size]
+                    self._data = pending_data[self._total_size + CRLF_SIZE :]
+                    self._events.append(msg)
+                    set_state(State.OP_END)
+                    set_state(State.OP_START)
+                    continue
                 else:
-                    self._pending_msg.payload = data
-                    return
+                    self._data = pending_data
+                    yield None
+                    continue
 
             elif state == State.OP_PLUS:
-                if value == Character.o or value == Character.O:
-                    self._history.append(State.OP_PLUS_O)
+                if next_byte == Character.o or next_byte == Character.O:
+                    set_state(State.OP_PLUS_O)
+                    continue
                 else:
-                    raise ProtocolError(value, data)
+                    raise ProtocolError(next_byte, pending_data)
 
             elif state == State.OP_PLUS_O:
-                if value == Character.k or value == Character.K:
-                    self._history.append(State.OP_PLUS_OK)
+                if next_byte == Character.k or next_byte == Character.K:
+                    set_state(State.OP_PLUS_OK)
+                    continue
                 else:
-                    raise ProtocolError(value, data)
+                    raise ProtocolError(next_byte, pending_data)
 
             elif state == State.OP_PLUS_OK:
-                if value == Character.carriage_return:
-                    self._history.append(State.OP_END)
+                if next_byte == Character.carriage_return:
+                    set_state(State.OP_END)
                     self._events.append(Event(Operation.OK))
+                    continue
                 else:
-                    raise ProtocolError(value, data)
+                    raise ProtocolError(next_byte, pending_data)
 
             elif state == State.OP_MINUS:
-                if value == Character.e or value == Character.E:
-                    self._history.append(State.OP_MINUS_E)
+                if next_byte == Character.e or next_byte == Character.E:
+                    set_state(State.OP_MINUS_E)
+                    continue
                 else:
-                    raise ProtocolError(value, data)
+                    raise ProtocolError(next_byte, pending_data)
 
             elif state == State.OP_MINUS_E:
-                if value == Character.r or value == Character.R:
-                    self._history.append(State.OP_MINUS_ER)
+                if next_byte == Character.r or next_byte == Character.R:
+                    set_state(State.OP_MINUS_ER)
+                    continue
                 else:
-                    raise ProtocolError(value, data)
+                    raise ProtocolError(next_byte, pending_data)
 
             elif state == State.OP_MINUS_ER:
-                if value == Character.r or value == Character.R:
-                    self._history.append(State.OP_MINUS_ERR)
+                if next_byte == Character.r or next_byte == Character.R:
+                    set_state(State.OP_MINUS_ERR)
+                    continue
                 else:
-                    raise ProtocolError(value, data)
+                    raise ProtocolError(next_byte, pending_data)
 
             elif state == State.OP_MINUS_ERR:
-                if value == Character.space:
-                    self._history.append(State.OP_MINUS_ERR_SPC)
+                if next_byte == Character.space:
+                    set_state(State.OP_MINUS_ERR_SPC)
+                    continue
                 else:
-                    raise ProtocolError(value, data)
+                    raise ProtocolError(next_byte, pending_data)
 
             elif state == State.OP_MINUS_ERR_SPC:
-                if value == Character.carriage_return:
-                    raise ProtocolError(value, data)
-                elif value == Character.newline:
-                    raise ProtocolError(value, data)
+                if next_byte == Character.carriage_return:
+                    raise ProtocolError(next_byte, pending_data)
+                elif next_byte == Character.newline:
+                    raise ProtocolError(next_byte, pending_data)
                 else:
                     try:
-                        self._error_message += chr(value)
+                        self._error_message += chr(next_byte)
                     except Exception:
-                        raise ProtocolError(value, data)
-                    self._history.append(State.MINUS_ERR_ARG)
+                        raise ProtocolError(next_byte, pending_data)
+                    set_state(State.MINUS_ERR_ARG)
+                    continue
 
             elif state == State.MINUS_ERR_ARG:
-                if value == Character.carriage_return:
+                if next_byte == Character.carriage_return:
                     msg = self._error_message
-                    self._history.append(State.OP_END)
+                    set_state(State.OP_END)
                     self._events.append(ErrorEvent(Operation.ERR, msg))
                     self._error_message = ""
-                elif value == Character.newline:
-                    raise ProtocolError(value, data)
+                elif next_byte == Character.newline:
+                    raise ProtocolError(next_byte, pending_data)
                 else:
                     try:
-                        self._error_message += chr(value)
+                        self._error_message += chr(next_byte)
+                        continue
                     except Exception:
-                        raise ProtocolError(value, data)
+                        raise ProtocolError(next_byte, pending_data)
 
             elif state == State.OP_P:
-                if value == Character.i or value == Character.I:
-                    self._history.append(State.OP_PI)
-                elif value == Character.o or value == Character.O:
-                    self._history.append(State.OP_PO)
+                if next_byte == Character.i or next_byte == Character.I:
+                    set_state(State.OP_PI)
+                    continue
+                elif next_byte == Character.o or next_byte == Character.O:
+                    set_state(State.OP_PO)
+                    continue
                 else:
-                    raise ProtocolError(value, data)
+                    raise ProtocolError(next_byte, pending_data)
 
             elif state == State.OP_PI:
-                if value == Character.n or value == Character.N:
-                    self._history.append(State.OP_PIN)
+                if next_byte == Character.n or next_byte == Character.N:
+                    set_state(State.OP_PIN)
+                    continue
                 else:
-                    raise ProtocolError(value, data)
+                    raise ProtocolError(next_byte, pending_data)
 
             elif state == State.OP_PIN:
-                if value == Character.g or value == Character.G:
-                    self._history.append(State.OP_PING)
+                if next_byte == Character.g or next_byte == Character.G:
+                    set_state(State.OP_PING)
+                    continue
                 else:
-                    raise ProtocolError(value, data)
+                    raise ProtocolError(next_byte, pending_data)
 
             elif state == State.OP_PING:
-                if value == Character.carriage_return:
-                    self._history.append(State.OP_END)
+                if next_byte == Character.carriage_return:
+                    set_state(State.OP_END)
                     self._events.append(Event(Operation.PING))
+                    continue
                 else:
-                    raise ProtocolError(value, data)
+                    raise ProtocolError(next_byte, pending_data)
 
             elif state == State.OP_PO:
-                if value == Character.n or value == Character.N:
-                    self._history.append(State.OP_PON)
+                if next_byte == Character.n or next_byte == Character.N:
+                    set_state(State.OP_PON)
                 else:
-                    raise ProtocolError(value, data)
+                    raise ProtocolError(next_byte, pending_data)
 
             elif state == State.OP_PON:
-                if value == Character.g or value == Character.G:
-                    self._history.append(State.OP_PONG)
+                if next_byte == Character.g or next_byte == Character.G:
+                    set_state(State.OP_PONG)
+                    continue
                 else:
-                    raise ProtocolError(value, data)
+                    raise ProtocolError(next_byte, pending_data)
 
             elif state == State.OP_PONG:
-                if value == Character.carriage_return:
-                    self._history.append(State.OP_END)
+                if next_byte == Character.carriage_return:
+                    set_state(State.OP_END)
                     self._events.append(Event(Operation.PONG))
+                    continue
                 else:
-                    raise ProtocolError(value, data)
+                    raise ProtocolError(next_byte, pending_data)
 
             elif state == State.OP_END:
-                if value == Character.newline:
-                    self._history.append(State.OP_START)
+                if next_byte == Character.newline:
+                    set_state(State.OP_START)
+                    continue
                 else:
-                    raise ProtocolError(value, data)
+                    raise ProtocolError(next_byte, pending_data)
 
             else:
-                raise ProtocolError(value, data)
+                raise ProtocolError(next_byte, pending_data)

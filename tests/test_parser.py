@@ -112,8 +112,8 @@ class TestParserBasic:
                 sid=1234,
                 subject="the.subject",
                 reply_to="",
-                payload_size=12,
                 payload=b"hello world!",
+                header=b"",
             ),
         ]
 
@@ -141,8 +141,70 @@ class TestParserBasic:
                 sid=1234,
                 subject="the.subject",
                 reply_to="the.reply.subject",
-                payload_size=12,
                 payload=b"hello world!",
+                header=b"",
+            ),
+        ]
+
+    @pytest.mark.parametrize(
+        "data",
+        ["hmsg the.subject 1234 18 30\r\nNATS/1.0\r\nA: B\r\n\r\nhello world!\r\n"],
+    )
+    def test_parse_hmsg(self, data: str):
+        history, events = parse_text(data)
+        assert history == [
+            State.OP_START,
+            State.OP_H,
+            State.OP_HM,
+            State.OP_HMS,
+            State.OP_HMSG,
+            State.OP_HMSG_SPC,
+            State.HMSG_ARG,
+            State.HMSG_END,
+            State.HMSG_PAYLOAD,
+            State.OP_END,
+            State.OP_START,
+        ]
+        assert events == [
+            MsgEvent(
+                operation=Operation.HMSG,
+                sid=1234,
+                subject="the.subject",
+                reply_to="",
+                payload=b"hello world!",
+                header=b"NATS/1.0\r\nA: B",
+            ),
+        ]
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            "hmsg the.subject 1234 the.reply.subject 18 30\r\nNATS/1.0\r\nA: B\r\n\r\nhello world!\r\n"
+        ],
+    )
+    def test_parse_hmsg_with_reply(self, data: str):
+        history, events = parse_text(data)
+        assert history == [
+            State.OP_START,
+            State.OP_H,
+            State.OP_HM,
+            State.OP_HMS,
+            State.OP_HMSG,
+            State.OP_HMSG_SPC,
+            State.HMSG_ARG,
+            State.HMSG_END,
+            State.HMSG_PAYLOAD,
+            State.OP_END,
+            State.OP_START,
+        ]
+        assert events == [
+            MsgEvent(
+                operation=Operation.HMSG,
+                sid=1234,
+                subject="the.subject",
+                reply_to="the.reply.subject",
+                payload=b"hello world!",
+                header=b"NATS/1.0\r\nA: B",
             ),
         ]
 
@@ -279,8 +341,8 @@ class TestParserAdvanced:
                 sid=1234,
                 subject="the.subject",
                 reply_to="",
-                payload_size=12,
                 payload=b"hello world!",
+                header=b"",
             ),
         ]
 
@@ -341,7 +403,7 @@ class TestParserAdvanced:
                 sid=1234,
                 subject="the.subject",
                 reply_to="the.reply.subject",
-                payload_size=12,
                 payload=b"hello world!",
+                header=b"",
             ),
         ]
