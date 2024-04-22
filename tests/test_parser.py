@@ -221,3 +221,127 @@ class TestParserAdvanced:
             ErrorEvent(operation=Operation.ERR, message="the error message"),
             ErrorEvent(operation=Operation.ERR, message="the other error message"),
         ]
+
+    @pytest.mark.parametrize(
+        "chunks",
+        [
+            [
+                b"msg the.subject 1234 12\r\n",
+                b"hello world!\r\n",
+            ],
+            [
+                b"msg the.subject 1234 12\r\nhello",
+                b" world!\r\n",
+            ],
+            [
+                b"msg the.subject 1234 12\r\nhello",
+                b" world!",
+                b"\r\n",
+            ],
+            [
+                b"msg the.subject",
+                b" 1234 12\r\nhello world!\r\n",
+            ],
+            [
+                b"msg the.subject",
+                b" 1234 12\r\nhello world",
+                b"!\r\n",
+            ],
+        ],
+        ids=[
+            "args_then_payload",
+            "args_then_payload_in_chunks",
+            "args_then_payload_in_chunks_then_cr",
+            "chunked_args_then_payload",
+            "chunked_args_then_chunked_payload",
+        ],
+    )
+    def test_parse_msg_in_several_chunks(self, chunks: list[bytes]):
+        parser = Parser(history=-1)
+        for chunk in chunks:
+            parser.parse(chunk)
+        history, events = parser.history(), parser.events()
+        assert history == [
+            State.OP_START,
+            State.OP_M,
+            State.OP_MS,
+            State.OP_MSG,
+            State.OP_MSG_SPC,
+            State.MSG_ARG,
+            State.MSG_END,
+            State.MSG_PAYLOAD,
+            State.OP_END,
+            State.OP_START,
+        ]
+        assert events == [
+            MsgEvent(
+                operation=Operation.MSG,
+                sid=1234,
+                subject="the.subject",
+                reply_to="",
+                payload_size=12,
+                payload=b"hello world!",
+            ),
+        ]
+
+    @pytest.mark.parametrize(
+        "chunks",
+        [
+            [
+                b"msg the.subject 1234 the.reply.subject 12\r\n",
+                b"hello world!\r\n",
+            ],
+            [
+                b"msg the.subject 1234 the.reply.subject 12\r\nhello",
+                b" world!\r\n",
+            ],
+            [
+                b"msg the.subject 1234 the.reply.subject 12\r\nhello",
+                b" world!",
+                b"\r\n",
+            ],
+            [
+                b"msg the.subject",
+                b" 1234 the.reply.subject 12\r\nhello world!\r\n",
+            ],
+            [
+                b"msg the.subject 1234 the.reply.",
+                b"subject 12\r\nhello world",
+                b"!\r\n",
+            ],
+        ],
+        ids=[
+            "args_then_payload",
+            "args_then_payload_in_chunks",
+            "args_then_payload_in_chunks_then_cr",
+            "chunked_args_then_payload",
+            "chunked_args_then_chunked_payload",
+        ],
+    )
+    def test_parse_msg_with_reply_in_several_chunks(self, chunks: list[bytes]):
+        parser = Parser(history=-1)
+        for chunk in chunks:
+            parser.parse(chunk)
+        history, events = parser.history(), parser.events()
+        assert history == [
+            State.OP_START,
+            State.OP_M,
+            State.OP_MS,
+            State.OP_MSG,
+            State.OP_MSG_SPC,
+            State.MSG_ARG,
+            State.MSG_END,
+            State.MSG_PAYLOAD,
+            State.OP_END,
+            State.OP_START,
+        ]
+        assert events == [
+            MsgEvent(
+                operation=Operation.MSG,
+                sid=1234,
+                subject="the.subject",
+                reply_to="the.reply.subject",
+                payload_size=12,
+                payload=b"hello world!",
+            ),
+        ]

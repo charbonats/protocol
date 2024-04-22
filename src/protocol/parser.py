@@ -254,11 +254,10 @@ class Parser:
 
             elif state == State.MSG_PAYLOAD:
                 assert self._pending_msg is not None, "pending_msg is None"
-                if len(data) >= self._pending_msg.payload_size + 1:
-                    self._pending_msg.payload = (
-                        bytes([value]) + data[: self._pending_msg.payload_size - 1]
-                    )
-                    data = data[self._pending_msg.payload_size - 1 :]
+                data = self._pending_msg.payload + bytes([value]) + data
+                if len(data) >= self._pending_msg.payload_size + 2:
+                    self._pending_msg.payload = data[: self._pending_msg.payload_size]
+                    data = data[self._pending_msg.payload_size :]
                     self._events.append(self._pending_msg)
                     if data[0] == Character.carriage_return:
                         data = data[1:]
@@ -267,6 +266,7 @@ class Parser:
                         raise ProtocolError(value, data)
                     self._pending_msg = None
                 else:
+                    self._pending_msg.payload = data
                     return
 
             elif state == State.OP_PLUS:
