@@ -9,13 +9,14 @@ from protocol.parser import (
     MsgEvent,
     Operation,
     Parser,
+    ProtocolError,
     State,
     Version,
 )
 
 
 def parse_text(data: str) -> tuple[list[State], list[Event]]:
-    parser = Parser(history=-1)
+    parser = Parser(debug_max_history=-1)
     parser.parse(data.encode("ascii"))
     return parser.history(), parser.events()
 
@@ -548,7 +549,7 @@ class TestParserAdvanced:
         ],
     )
     def test_parse_msg_in_several_chunks(self, chunks: list[bytes]):
-        parser = Parser(history=-1)
+        parser = Parser(debug_max_history=-1)
         for chunk in chunks:
             parser.parse(chunk)
         history, events = parser.history(), parser.events()
@@ -610,7 +611,7 @@ class TestParserAdvanced:
         ],
     )
     def test_parse_msg_with_reply_in_several_chunks(self, chunks: list[bytes]):
-        parser = Parser(history=-1)
+        parser = Parser(debug_max_history=-1)
         for chunk in chunks:
             parser.parse(chunk)
         history, events = parser.history(), parser.events()
@@ -636,3 +637,10 @@ class TestParserAdvanced:
                 header=b"",
             ),
         ]
+
+
+class TestErrors:
+    def test_parse_invalid(self):
+        with pytest.raises(ProtocolError) as exc:
+            parse_text("invalid\r\n")
+        assert exc.match("unexpected byte: b'v'")
