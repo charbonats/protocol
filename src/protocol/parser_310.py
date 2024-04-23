@@ -19,8 +19,10 @@ from .common import (
     parse_info,
 )
 
+STOP_HEADER = bytearray(b"\r\n\r\n")
 
-class Parser:
+
+class Parser310:
     """NATS Protocol parser."""
 
     __slots__ = ["_closed", "_state", "_data_received", "_events_received", "__loop__"]
@@ -39,7 +41,7 @@ class Parser:
         self._events_received = []
         return events
 
-    def parse(self, data: bytes) -> None:
+    def parse(self, data: bytes | bytearray) -> None:
         self._data_received.extend(data)
         self.__loop__.__next__()
 
@@ -94,8 +96,8 @@ class Parser:
                                     sid=sid,
                                     subject=subject,
                                     reply_to=reply_to,
-                                    payload=b"",
-                                    header=b"",
+                                    payload=bytearray(),
+                                    header=bytearray(),
                                 )
                                 state = State.MSG_END
                                 cursor = end + 1
@@ -104,6 +106,54 @@ class Parser:
                             cursor += 1
                             continue
                         case Character.H | Character.h:
+                            # Fast path for HMSG
+                            if CRLF in self._data_received:
+                                end = self._data_received.index(CRLF)
+                                args = (
+                                    self._data_received[cursor + 5 : end]
+                                    .decode()
+                                    .split(" ")
+                                )
+                                match len(args):
+                                    case 5:
+                                        (
+                                            subject,
+                                            raw_sid,
+                                            reply_to,
+                                            raw_header_size,
+                                            raw_total_size,
+                                        ) = args
+                                    case 4:
+                                        reply_to = ""
+                                        (
+                                            subject,
+                                            raw_sid,
+                                            raw_header_size,
+                                            raw_total_size,
+                                        ) = args
+                                    case _:
+                                        raise ProtocolError(
+                                            next_byte, self._data_received
+                                        )
+                                try:
+                                    expected_header_size = int(raw_header_size)
+                                    expected_total_size = int(raw_total_size)
+                                    sid = int(raw_sid)
+                                except Exception as e:
+                                    raise ProtocolError(
+                                        next_byte, self._data_received
+                                    ) from e
+                                partial_msg = MsgEvent(
+                                    Operation.HMSG,
+                                    sid=sid,
+                                    subject=subject,
+                                    reply_to=reply_to,
+                                    payload=bytearray(),
+                                    header=bytearray(),
+                                )
+                                state = State.HMSG_END
+                                cursor = end + 1
+                                continue
                             state = State.OP_H
                             cursor += 1
                             continue
@@ -204,8 +254,8 @@ class Parser:
                             sid=sid,
                             subject=subject,
                             reply_to=reply_to,
-                            payload=b"",
-                            header=b"",
+                            payload=bytearray(),
+                            header=bytearray(),
                         )
                         state = State.HMSG_END
                         cursor = end + 1
@@ -228,8 +278,8 @@ class Parser:
                         msg = partial_msg
                         partial_msg = None
                         header = self._data_received[:expected_header_size]
-                        if header[-4:] != bytearray(b"\r\n\r\n"):
-                            raise ProtocolError(next_byte, self._data_received)
+                        if header[-4:] != STOP_HEADER:
+                            raise ProtocolError(next_byte, header)
                         msg.header = header[:-4]
                         payload = self._data_received[
                             expected_header_size:expected_total_size
@@ -307,8 +357,8 @@ class Parser:
                             sid=sid,
                             subject=subject,
                             reply_to=reply_to,
-                            payload=b"",
-                            header=b"",
+                            payload=bytearray(),
+                            header=bytearray(),
                         )
                         state = State.MSG_END
                         cursor = end + 1
@@ -454,7 +504,7 @@ class Parser:
                         cursor = 0
                         state = State.OP_END
                         state = State.OP_START
-                        self._events_received.append(parse_info(bytes(data)))
+                        self._events_received.append(parse_info(data))
                         continue
                     else:
                         yield None
@@ -556,4 +606,4 @@ if TYPE_CHECKING:
     from .common import Parser as ParserProtocol
 
     # Verify that Parser implements ParserProtocol
-    parser: ParserProtocol = Parser()
+    parser: ParserProtocol = Parser310()

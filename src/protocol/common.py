@@ -14,7 +14,9 @@ class ProtocolError(Exception):
     def __init__(self, invalid_byte: int, bad_value: bytearray) -> None:
         self.bad_value = bad_value
         self.invalid_byte = invalid_byte
-        super().__init__(f"unexpected byte: {bytes([invalid_byte])}")
+        super().__init__(
+            f"unexpected byte: {bytes([invalid_byte])} (pending: {bad_value})"
+        )
 
 
 class State(IntEnum):
@@ -65,7 +67,7 @@ class Character(IntEnum):
     minus = ord("-")
     # ok
     o = ord("o")
-    O = ord("O")
+    O = ord("O")  # noqa: E741
     k = ord("k")
     K = ord("K")
     # err
@@ -93,7 +95,7 @@ class Character(IntEnum):
     G = ord("G")
     # ping
     i = ord("i")
-    I = ord("I")
+    I = ord("I")  # noqa: E741
     n = ord("n")
     N = ord("N")
     # info
@@ -208,7 +210,7 @@ class InfoEvent(Event):
 
 
 class Parser(Protocol):
-    def parse(self, data: bytes) -> None: ...
+    def parse(self, data: bytes | bytearray) -> None: ...
 
     def events_received(self) -> list[Event]: ...
 
@@ -217,7 +219,7 @@ CRLF = bytes([Character.carriage_return, Character.newline])
 CRLF_SIZE = len(CRLF)
 
 
-def parse_info(data: bytes) -> InfoEvent:
+def parse_info(data: bytearray | bytes) -> InfoEvent:
     raw_info = json.loads(data.decode())
     return InfoEvent(
         operation=Operation.INFO,

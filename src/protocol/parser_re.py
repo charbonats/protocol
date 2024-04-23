@@ -93,7 +93,7 @@ AUTHORIZATION_VIOLATION = "authorization violation"
 PERMISSIONS_ERR = "permissions violation"
 
 
-class Parser:
+class ParserRE:
     def __init__(self, *args: object, **kwargs: object) -> None:
         self.reset()
 
@@ -114,7 +114,7 @@ class Parser:
         self._events = []
         return events
 
-    def parse(self, data: bytes) -> None:
+    def parse(self, data: bytes | bytearray) -> None:
         self.buf.extend(data)
         self.__parser__.__next__()
 
@@ -235,8 +235,8 @@ class Parser:
                             sid,
                             subject.decode(),
                             reply.decode(),
-                            payload,
-                            hdr or b"",
+                            bytearray(payload),
+                            bytearray(hdr or b""),
                         )
                     )
                 else:
@@ -254,4 +254,4 @@ if TYPE_CHECKING:
     from .common import Parser as ParserProtocol
 
     # Verify that Parser implements ParserProtocol
-    parser: ParserProtocol = Parser()
+    parser: ParserProtocol = ParserRE()

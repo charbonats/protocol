@@ -12,7 +12,7 @@ from protocol.common import (
     ProtocolError,
     Version,
 )
-from protocol.parser_re import Parser as ParserRe
+from protocol.parser_re import ParserRE as ParserRe
 
 
 def fuzz_case(string: str, suffix: str | None = None) -> list[str]:
@@ -153,8 +153,8 @@ class TestParserBasic:
                 sid=1234,
                 subject="the.subject",
                 reply_to="",
-                payload=b"",
-                header=b"",
+                payload=bytearray(),
+                header=bytearray(),
             ),
         ]
 
@@ -166,8 +166,8 @@ class TestParserBasic:
                 sid=1234,
                 subject="the.subject",
                 reply_to="the.reply.subject",
-                payload=b"",
-                header=b"",
+                payload=bytearray(),
+                header=bytearray(),
             ),
         ]
 
@@ -182,8 +182,8 @@ class TestParserBasic:
                 sid=1234,
                 subject="the.subject",
                 reply_to="",
-                payload=b"hello world!",
-                header=b"",
+                payload=bytearray(b"hello world!"),
+                header=bytearray(),
             ),
         ]
 
@@ -199,8 +199,8 @@ class TestParserBasic:
                 sid=1234,
                 subject="the.subject",
                 reply_to="the.reply.subject",
-                payload=b"hello world!",
-                header=b"",
+                payload=bytearray(b"hello world!"),
+                header=bytearray(),
             ),
         ]
 
@@ -214,8 +214,8 @@ class TestParserBasic:
                 sid=1234,
                 subject="the.subject",
                 reply_to="",
-                payload=b"",
-                header=b"",
+                payload=bytearray(),
+                header=bytearray(),
             ),
         ]
 
@@ -231,8 +231,8 @@ class TestParserBasic:
                 sid=1234,
                 subject="the.subject",
                 reply_to="",
-                payload=b"",
-                header=b"NATS/1.0\r\nFoo: Bar",
+                payload=bytearray(),
+                header=bytearray(b"NATS/1.0\r\nFoo: Bar"),
             ),
         ]
 
@@ -250,8 +250,8 @@ class TestParserBasic:
                 sid=1234,
                 subject="the.subject",
                 reply_to="",
-                payload=b"hello world!",
-                header=b"NATS/1.0\r\nA: B",
+                payload=bytearray(b"hello world!"),
+                header=bytearray(b"NATS/1.0\r\nA: B"),
             ),
         ]
 
@@ -271,8 +271,8 @@ class TestParserBasic:
                 sid=1234,
                 subject="the.subject",
                 reply_to="the.reply.subject",
-                payload=b"hello world!",
-                header=b"NATS/1.0\r\nA: B",
+                payload=bytearray(b"hello world!"),
+                header=bytearray(b"NATS/1.0\r\nA: B"),
             ),
         ]
 
@@ -381,8 +381,8 @@ class TestParserBasic:
                 sid=1234,
                 subject="the.subject",
                 reply_to="",
-                payload=b"hello world!",
-                header=b"",
+                payload=bytearray(b"hello world!"),
+                header=bytearray(),
             ),
         ]
 
@@ -430,8 +430,8 @@ class TestParserBasic:
                 sid=1234,
                 subject="the.subject",
                 reply_to="the.reply.subject",
-                payload=b"hello world!",
-                header=b"",
+                payload=bytearray(b"hello world!"),
+                header=bytearray(),
             ),
         ]
 

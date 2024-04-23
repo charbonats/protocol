@@ -18,6 +18,7 @@ managed = true
 dev-dependencies = [
     "pytest>=8.1.1",
     "pyright>=1.1.359",
+    "coverage>=7.4.4",
 ]
 
 [tool.hatch.metadata]
@@ -28,10 +29,91 @@ packages = ["src/protocol"]
 
 [tool.pyright]
 pythonVersion = "3.10"
-include = ["tests", "src", "benchmarks"]
+include = ["tests", "src"]
 exclude = ["**/.venv", "**/node_modules", "**/__pycache__", ".git", "**/build"]
 venv = ".venv"
 venvPath = "."
 typeCheckingMode = "strict"
 reportUnnecessaryTypeIgnoreComment = "warning"
-disableBytesTypePromotions = false
+
+[tool.rye.scripts]
+# Run test with coverage
+test = { chain = ["__test", "__coverage-html"] }
+# View coverage report
+htmlcov = "python -m http.server 8080 --directory coverage-report"
+# Automate pre-commit
+pre = { chain = ["format", "lint", "test", "typecheck"] }
+# Automate CI
+ci-full = { chain = ["bootstrap", "lint", "formatcheck", "test", "typecheck", "bench"] }
+ci-lint = { chain = ["bootstrap", "lint"] }
+ci-format = { chain = ["bootstrap", "formatcheck"] }
+ci-test = { chain = ["bootstrap", "test"] }
+ci-bench = { chain = ["bootstrap", "bench"] }
+ci-typecheck = { chain = ["bootstrap", "typecheck"] }
+# Automate project install
+bootstrap = { chain = ["__install-project"] }
+# Run pyright static type checker
+typecheck = { cmd = "pyright", env = { PYRIGHT_PYTHON_FORCE_VERSION = "latest" } }
+# Generate version file
+version = "hatch --quiet build --hooks-only"
+# Run linter
+lint = "rye lint"
+# Run formatter
+format = "rye fmt"
+formatcheck = "rye fmt --check"
+# Run benchmarks
+bench = { chain = ["__bench_ping_pong", "__bench_msg_hmsg", "__bench_msg_ping_pong_msg"] }
+# Clear cache
+clear = { chain = ["__clear_pycache", "__clear_bench", "__clear_dist"] }
+__clear_bench = "rm -rf ./bench"
+__clear_pycache = "find . -type d -name __pycache__ -exec rm -rf {} +"
+__clear_dist = "rm -rf ./dist"
+# Private commands
+__test = "coverage run --rcfile=pyproject.toml -m pytest -vvv"
+__coverage-html = "coverage html"
+__install-project = "rye sync --no-lock --force"
+__bench_ping_pong = { chain = [
+    "__bench_ping_pong_300",
+    "__bench_ping_pong_310",
+    "__bench_ping_pong_re",
+] }
+__bench_msg_hmsg = { chain = [
+    "__bench_msg_hmsg_300",
+    "__bench_msg_hmsg_310",
+    "__bench_msg_hmsg_re",
+] }
+__bench_msg_ping_pong_msg = { chain = [
+    "__bench_msg_ping_pong_msg_300",
+    "__bench_msg_ping_pong_msg_310",
+    "__bench_msg_ping_pong_msg_re",
+] }
+__bench_ping_pong_300 = "python -m benchmarks -s ping_pong -o bench -p 300"
+__bench_ping_pong_310 = "python -m benchmarks -s ping_pong -o bench -p 310"
+__bench_ping_pong_re = "python -m benchmarks -s ping_pong -o bench -p re"
+__bench_msg_hmsg_300 = "python -m benchmarks -s msg_hmsg -o bench -p 300"
+__bench_msg_hmsg_310 = "python -m benchmarks -s msg_hmsg -o bench -p 310"
+__bench_msg_hmsg_re = "python -m benchmarks -s msg_hmsg -o bench -p re"
+__bench_msg_ping_pong_msg_300 = "python -m benchmarks -s msg_ping_pong_msg -o bench -p 300"
+__bench_msg_ping_pong_msg_310 = "python -m benchmarks -s msg_ping_pong_msg -o bench -p 310"
+__bench_msg_ping_pong_msg_re = "python -m benchmarks -s msg_ping_pong_msg -o bench -p re"
+
+[tool.coverage.run]
+source = ["src/protocol"]
+branch = true
+[tool.coverage.report]
+# Regexes for lines to exclude from consideration
+exclude_also = [
+    # Don't complain about missing type-only code:
+    "if TYPE_CHECKING:",
+
+    # Don't complain if tests don't hit defensive assertion code:
+    "raise NotImplementedError",
+
+    # Don't complain if non-runnable code isn't run:
+    "if __name__ == .__main__.:",
+
+    # Don't complain about abstract methods, they aren't run:
+    "@(abc\\.)?abstractmethod",
+]
+[tool.coverage.html]
+directory = "coverage-report"

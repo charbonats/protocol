@@ -19,8 +19,10 @@ from .common import (
     parse_info,
 )
 
+STOP_HEADER = bytearray(b"\r\n\r\n")
 
-class Parser:
+
+class Parser300:
     """NATS Protocol parser."""
 
     def __init__(self) -> None:
@@ -38,7 +40,7 @@ class Parser:
         self._events_received = []
         return events
 
-    def parse(self, data: bytes) -> None:
+    def parse(self, data: bytes | bytearray) -> None:
         self._data_received += data
         next(self.__loop__)
 
@@ -172,8 +174,8 @@ class Parser:
                         sid=sid,
                         subject=subject,
                         reply_to=reply_to,
-                        payload=b"",
-                        header=b"",
+                        payload=bytearray(),
+                        header=bytearray(),
                     )
                     self._state = State.HMSG_END
                     cursor = end + 1
@@ -198,7 +200,7 @@ class Parser:
                     partial_msg = None
 
                     header = self._data_received[:expected_header_size]
-                    if header[-4:] != b"\r\n\r\n":
+                    if header[-4:] != STOP_HEADER:
                         raise ProtocolError(next_byte, self._data_received)
                     msg.header = header[:-4]
 
@@ -277,8 +279,8 @@ class Parser:
                         sid=sid,
                         subject=subject,
                         reply_to=reply_to,
-                        payload=b"",
-                        header=b"",
+                        payload=bytearray(),
+                        header=bytearray(),
                     )
                     cursor = end + 1
                     self._state = State.MSG_END
@@ -529,4 +531,4 @@ if TYPE_CHECKING:
     from .common import Parser as ParserProtocol
 
     # Verify that Parser implements ParserProtocol
-    parser: ParserProtocol = Parser()
+    parser: ParserProtocol = Parser300()

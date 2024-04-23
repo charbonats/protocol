@@ -28,8 +28,8 @@ def hmsg(
     subject = token_hex(subject_size)
     reply = token_hex(reply_subject_size)
     message = token_hex(message_size)
-    header = token_hex(header_size)
-    return f"HMSG {subject} {sid} {reply} {header} {len(message)}\r\n{message}".encode()
+    header = "NATS/1.0\r\n" + token_hex(header_size)
+    return f"HMSG {subject} {sid}{(' ' + reply + ' ') if reply else ' '}{len(header) + 4} {len(message) + len(header) + 4}\r\n{header}\r\n\r\n{message}\r\n".encode()
 
 
 def ping() -> bytes:
