@@ -20,6 +20,8 @@ from .common import (
 )
 
 STOP_HEADER = bytearray(b"\r\n\r\n")
+PING_OP = bytearray(b"PING")
+PONG_OP = bytearray(b"PONG")
 
 
 class Parser310:
@@ -158,9 +160,24 @@ class Parser310:
                             cursor += 1
                             continue
                         case Character.P | Character.p:
-                            state = State.OP_P
-                            cursor += 1
-                            continue
+                            # Fast path for PING or PONG
+                            if CRLF in self._data_received:
+                                end = self._data_received.index(CRLF)
+                                data = self._data_received[cursor:end]
+                                if data == PING_OP:
+                                    self._events_received.append(Event(Operation.PING))
+                                elif data == PONG_OP:
+                                    self._events_received.append(Event(Operation.PONG))
+                                else:
+                                    raise ProtocolError(next_byte, self._data_received)
+                                state = State.OP_START
+                                self._data_received = self._data_received[end + 2 :]
+                                cursor = 0
+                                continue
+                            else:
+                                state = State.OP_P
+                                cursor += 1
+                                continue
                         case Character.I | Character.i:
                             state = State.OP_I
                             cursor += 1
