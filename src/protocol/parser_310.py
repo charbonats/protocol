@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Iterator
 from .common import (
     CRLF,
     CRLF_SIZE,
-    Character,
     ErrorEvent,
     Event,
     MsgEvent,
@@ -67,7 +66,8 @@ class Parser310:
             match state:
                 case State.OP_START:
                     match next_byte:
-                        case Character.M | Character.m:
+                        # case "m" | "M"
+                        case 77 | 109:
                             # Fast path for MSG
                             if CRLF in self._data_received:
                                 end = self._data_received.index(CRLF)
@@ -107,7 +107,8 @@ class Parser310:
                             state = State.OP_M
                             cursor += 1
                             continue
-                        case Character.H | Character.h:
+                        # case "H" | "h"
+                        case 72 | 104:
                             # Fast path for HMSG
                             if CRLF in self._data_received:
                                 end = self._data_received.index(CRLF)
@@ -159,11 +160,12 @@ class Parser310:
                             state = State.OP_H
                             cursor += 1
                             continue
-                        case Character.P | Character.p:
+                        # case "P" | "p"
+                        case 80 | 112:
                             # Fast path for PING or PONG
                             if CRLF in self._data_received:
                                 end = self._data_received.index(CRLF)
-                                data = self._data_received[cursor:end]
+                                data = self._data_received[cursor:end].upper()
                                 if data == PING_OP:
                                     self._events_received.append(Event(Operation.PING))
                                 elif data == PONG_OP:
@@ -178,15 +180,18 @@ class Parser310:
                                 state = State.OP_P
                                 cursor += 1
                                 continue
-                        case Character.I | Character.i:
+                        # case "I" | "i
+                        case 73 | 105:
                             state = State.OP_I
                             cursor += 1
                             continue
-                        case Character.plus:
+                        # case "+"
+                        case 43:
                             state = State.OP_PLUS
                             cursor += 1
                             continue
-                        case Character.minus:
+                        # case "-"
+                        case 45:
                             state = State.OP_MINUS
                             cursor += 1
                             continue
@@ -194,7 +199,8 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_H:
                     match next_byte:
-                        case Character.M | Character.m:
+                        # case "M" | "m"
+                        case 77 | 109:
                             state = State.OP_HM
                             cursor += 1
                             continue
@@ -202,7 +208,8 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_HM:
                     match next_byte:
-                        case Character.S | Character.s:
+                        # case "S" | "s"
+                        case 83 | 115:
                             state = State.OP_HMS
                             cursor += 1
                             continue
@@ -210,7 +217,8 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_HMS:
                     match next_byte:
-                        case Character.G | Character.g:
+                        # case "G" | "g"
+                        case 71 | 103:
                             state = State.OP_HMSG
                             cursor += 1
                             continue
@@ -218,7 +226,8 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_HMSG:
                     match next_byte:
-                        case Character.space:
+                        # case " " | "\t":
+                        case 32 | 9:
                             state = State.OP_HMSG_SPC
                             cursor += 1
                             continue
@@ -226,11 +235,8 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_HMSG_SPC:
                     match next_byte:
-                        case (
-                            Character.carriage_return
-                            | Character.newline
-                            | Character.space
-                        ):
+                        # case "\r" | "\n" | " " | "\t"
+                        case 13 | 10 | 32 | 9:
                             raise ProtocolError(next_byte, self._data_received)
                         case _:
                             state = State.HMSG_ARG
@@ -282,7 +288,7 @@ class Parser310:
                         continue
                 case State.HMSG_END:
                     match next_byte:
-                        case Character.newline:
+                        case 10:
                             state = State.HMSG_PAYLOAD
                             self._data_received = self._data_received[cursor + 1 :]
                             cursor = 0
@@ -315,7 +321,8 @@ class Parser310:
                         continue
                 case State.OP_M:
                     match next_byte:
-                        case Character.S | Character.s:
+                        # case "S" | "s"
+                        case 83 | 115:
                             state = State.OP_MS
                             cursor += 1
                             continue
@@ -323,7 +330,8 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_MS:
                     match next_byte:
-                        case Character.G | Character.g:
+                        # case "G" | "g"
+                        case 71 | 103:
                             state = State.OP_MSG
                             cursor += 1
                             continue
@@ -331,7 +339,8 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_MSG:
                     match next_byte:
-                        case Character.space:
+                        # case " " | "\t"
+                        case 32 | 9:
                             state = State.OP_MSG_SPC
                             cursor += 1
                             continue
@@ -339,11 +348,11 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_MSG_SPC:
                     match next_byte:
-                        case Character.carriage_return:
+                        case 13:
                             raise ProtocolError(next_byte, self._data_received)
-                        case Character.newline:
+                        case 10:
                             raise ProtocolError(next_byte, self._data_received)
-                        case Character.space:
+                        case 32:
                             raise ProtocolError(next_byte, self._data_received)
                         case _:
                             state = State.MSG_ARG
@@ -385,7 +394,7 @@ class Parser310:
                         continue
                 case State.MSG_END:
                     match next_byte:
-                        case Character.newline:
+                        case 10:
                             state = State.MSG_PAYLOAD
                             self._data_received = self._data_received[cursor + 1 :]
                             cursor = 0
@@ -411,11 +420,13 @@ class Parser310:
                         continue
                 case State.OP_P:
                     match next_byte:
-                        case Character.I | Character.i:
+                        # case "I" | "i"
+                        case 73 | 105:
                             state = State.OP_PI
                             cursor += 1
                             continue
-                        case Character.O | Character.o:
+                        # case "O" | "o"
+                        case 79 | 111:
                             state = State.OP_PO
                             cursor += 1
                             continue
@@ -423,7 +434,8 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_PI:
                     match next_byte:
-                        case Character.N | Character.n:
+                        # case "N" | "n"
+                        case 78 | 110:
                             state = State.OP_PIN
                             cursor += 1
                             continue
@@ -431,7 +443,8 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_PIN:
                     match next_byte:
-                        case Character.G | Character.g:
+                        # case "G" | "g"
+                        case 71 | 103:
                             state = State.OP_PING
                             cursor += 1
                             continue
@@ -439,7 +452,8 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_PING:
                     match next_byte:
-                        case Character.carriage_return:
+                        # case "\r"
+                        case 13:
                             state = State.OP_END
                             self._events_received.append(Event(Operation.PING))
                             self._data_received = self._data_received[cursor + 1 :]
@@ -449,14 +463,16 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_PO:
                     match next_byte:
-                        case Character.N | Character.n:
+                        # case "N" | "n"
+                        case 78 | 110:
                             state = State.OP_PON
                             cursor += 1
                         case _:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_PON:
                     match next_byte:
-                        case Character.G | Character.g:
+                        # case "G" | "g"
+                        case 71 | 103:
                             state = State.OP_PONG
                             cursor += 1
                             continue
@@ -464,7 +480,7 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_PONG:
                     match next_byte:
-                        case Character.carriage_return:
+                        case 13:
                             state = State.OP_END
                             self._events_received.append(Event(Operation.PONG))
                             self._data_received = self._data_received[cursor + 1 :]
@@ -474,7 +490,7 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_I:
                     match next_byte:
-                        case Character.N | Character.n:
+                        case 78 | 110:
                             state = State.OP_IN
                             cursor += 1
                             continue
@@ -482,7 +498,8 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_IN:
                     match next_byte:
-                        case Character.F | Character.f:
+                        # case "F" | "f"
+                        case 70 | 102:
                             state = State.OP_INF
                             cursor += 1
                             continue
@@ -490,7 +507,8 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_INF:
                     match next_byte:
-                        case Character.O | Character.o:
+                        # case "O" | "o"
+                        case 79 | 111:
                             state = State.OP_INFO
                             cursor += 1
                             continue
@@ -498,7 +516,8 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_INFO:
                     match next_byte:
-                        case Character.space:
+                        # case " " | "\t"
+                        case 32 | 9:
                             state = State.OP_INFO_SPC
                             cursor += 1
                             continue
@@ -506,7 +525,7 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_INFO_SPC:
                     match next_byte:
-                        case Character.left_json_bracket:
+                        case 123:
                             state = State.INFO_ARG
                             self._data_received = self._data_received[cursor:]
                             cursor = 1
@@ -528,7 +547,8 @@ class Parser310:
                         continue
                 case State.OP_PLUS:
                     match next_byte:
-                        case Character.O | Character.o:
+                        # case "O" | "o"
+                        case 79 | 111:
                             state = State.OP_PLUS_O
                             cursor += 1
                             continue
@@ -536,7 +556,8 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_PLUS_O:
                     match next_byte:
-                        case Character.K | Character.k:
+                        # case "K" | "k
+                        case 75 | 107:
                             state = State.OP_PLUS_OK
                             cursor += 1
                             continue
@@ -544,7 +565,7 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_PLUS_OK:
                     match next_byte:
-                        case Character.carriage_return:
+                        case 13:
                             state = State.OP_END
                             self._events_received.append(Event(Operation.OK))
                             self._data_received = self._data_received[cursor + 1 :]
@@ -554,7 +575,7 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_MINUS:
                     match next_byte:
-                        case Character.E | Character.e:
+                        case 69 | 101:
                             state = State.OP_MINUS_E
                             cursor += 1
                             continue
@@ -562,7 +583,8 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_MINUS_E:
                     match next_byte:
-                        case Character.R | Character.r:
+                        # case "R" | "r"
+                        case 82 | 114:
                             state = State.OP_MINUS_ER
                             cursor += 1
                             continue
@@ -570,7 +592,7 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_MINUS_ER:
                     match next_byte:
-                        case Character.R | Character.r:
+                        case 82 | 114:
                             state = State.OP_MINUS_ERR
                             cursor += 1
                             continue
@@ -578,7 +600,8 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_MINUS_ERR:
                     match next_byte:
-                        case Character.space:
+                        # case " " | "\t"
+                        case 32 | 9:
                             state = State.OP_MINUS_ERR_SPC
                             cursor += 1
                             continue
@@ -586,9 +609,9 @@ class Parser310:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_MINUS_ERR_SPC:
                     match next_byte:
-                        case Character.carriage_return:
+                        case 13:
                             raise ProtocolError(next_byte, self._data_received)
-                        case Character.newline:
+                        case 10:
                             raise ProtocolError(next_byte, self._data_received)
                         case _:
                             state = State.MINUS_ERR_ARG
@@ -597,20 +620,20 @@ class Parser310:
                             continue
                 case State.MINUS_ERR_ARG:
                     match next_byte:
-                        case Character.carriage_return:
+                        case 13:
                             msg = self._data_received[:cursor].decode()
                             state = State.OP_END
                             self._events_received.append(ErrorEvent(Operation.ERR, msg))
                             self._data_received = self._data_received[cursor + 1 :]
                             cursor = 0
-                        case Character.newline:
+                        case 10:
                             raise ProtocolError(next_byte, self._data_received)
                         case _:
                             cursor += 1
                             continue
                 case State.OP_END:
                     match next_byte:
-                        case Character.newline:
+                        case 10:
                             state = State.OP_START
                             self._data_received = self._data_received[cursor + 1 :]
                             cursor = 0

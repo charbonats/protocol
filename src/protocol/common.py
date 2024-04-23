@@ -61,51 +61,51 @@ class State(IntEnum):
     OP_END = auto()
 
 
-class Character(IntEnum):
-    # +/-
-    plus = ord("+")
-    minus = ord("-")
-    # ok
-    o = ord("o")
-    O = ord("O")  # noqa: E741
-    k = ord("k")
-    K = ord("K")
-    # err
-    e = ord("e")
-    E = ord("E")
-    r = ord("r")
-    R = ord("R")
-    # pub
-    p = ord("p")
-    P = ord("P")
-    u = ord("u")
-    U = ord("U")
-    b = ord("b")
-    B = ord("B")
-    # sub
-    s = ord("s")
-    S = ord("S")
-    # hpub
-    h = ord("h")
-    H = ord("H")
-    # msg
-    m = ord("m")
-    M = ord("M")
-    g = ord("g")
-    G = ord("G")
-    # ping
-    i = ord("i")
-    I = ord("I")  # noqa: E741
-    n = ord("n")
-    N = ord("N")
-    # info
-    f = ord("f")
-    F = ord("F")
-    # special characters
-    space = ord(" ")
-    newline = ord("\n")
-    carriage_return = ord("\r")
-    left_json_bracket = ord("{")
+# +/-
+plus = ord("+")
+minus = ord("-")
+# ok
+o = ord("o")
+O = ord("O")  # noqa: E741
+k = ord("k")
+K = ord("K")
+# err
+e = ord("e")
+E = ord("E")
+r = ord("r")
+R = ord("R")
+# pub
+p = ord("p")
+P = ord("P")
+u = ord("u")
+U = ord("U")
+b = ord("b")
+B = ord("B")
+# sub
+s = ord("s")
+S = ord("S")
+# hpub
+h = ord("h")
+H = ord("H")
+# msg
+m = ord("m")
+M = ord("M")
+g = ord("g")
+G = ord("G")
+# ping
+i = ord("i")
+I = ord("I")  # noqa: E741
+n = ord("n")
+N = ord("N")
+# info
+f = ord("f")
+F = ord("F")
+# special characters
+space = ord(" ")
+tab = ord("\t")
+new_line = ord("\n")
+carriage_return = ord("\r")
+left_json_bracket = ord("{")
 
 
 class Operation(IntEnum):
@@ -215,7 +215,7 @@ class Parser(Protocol):
     def events_received(self) -> list[Event]: ...
 
 
-CRLF = bytes([Character.carriage_return, Character.newline])
+CRLF = bytes([carriage_return, new_line])
 CRLF_SIZE = len(CRLF)
 
 

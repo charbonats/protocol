@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Iterator
 from .common import (
     CRLF,
     CRLF_SIZE,
-    Character,
     ErrorEvent,
     Event,
     MsgEvent,
@@ -17,7 +16,38 @@ from .common import (
     ProtocolError,
     State,
     parse_info,
+    plus,
+    minus,
+    o,
+    O,
+    k,
+    K,
+    e,
+    E,
+    r,
+    R,
+    p,
+    P,
+    s,
+    S,
+    h,
+    H,
+    m,
+    M,
+    g,
+    G,
+    i,
+    I,
+    n,
+    N,
+    f,
+    F,
+    space,
+    new_line,
+    carriage_return,
+    left_json_bracket,
 )
+
 
 STOP_HEADER = bytearray(b"\r\n\r\n")
 
@@ -67,32 +97,32 @@ class Parser300:
 
             if state == State.OP_START:
                 # MSG
-                if next_byte == Character.M or next_byte == Character.m:
+                if next_byte == M or next_byte == m:
                     self._state = State.OP_M
                     cursor += 1
                     continue
                 # HMSG
-                elif next_byte == Character.H or next_byte == Character.h:
+                elif next_byte == H or next_byte == h:
                     self._state = State.OP_H
                     cursor += 1
                     continue
                 # PING/PONG
-                elif next_byte == Character.P or next_byte == Character.p:
+                elif next_byte == P or next_byte == p:
                     self._state = State.OP_P
                     cursor += 1
                     continue
                 # INFO
-                elif next_byte == Character.I or next_byte == Character.i:
+                elif next_byte == I or next_byte == i:
                     self._state = State.OP_I
                     cursor += 1
                     continue
                 # +OK
-                elif next_byte == Character.plus:
+                elif next_byte == plus:
                     self._state = State.OP_PLUS
                     cursor += 1
                     continue
                 # -ERR
-                elif next_byte == Character.minus:
+                elif next_byte == minus:
                     self._state = State.OP_MINUS
                     cursor += 1
                     continue
@@ -101,7 +131,7 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_H:
-                if next_byte == Character.m or next_byte == Character.M:
+                if next_byte == m or next_byte == M:
                     self._state = State.OP_HM
                     cursor += 1
                     continue
@@ -109,7 +139,7 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_HM:
-                if next_byte == Character.s or next_byte == Character.S:
+                if next_byte == s or next_byte == S:
                     self._state = State.OP_HMS
                     cursor += 1
                     continue
@@ -117,7 +147,7 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_HMS:
-                if next_byte == Character.g or next_byte == Character.G:
+                if next_byte == g or next_byte == G:
                     self._state = State.OP_HMSG
                     cursor += 1
                     continue
@@ -125,7 +155,7 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_HMSG:
-                if next_byte == Character.space:
+                if next_byte == space:
                     self._state = State.OP_HMSG_SPC
                     cursor += 1
                     continue
@@ -133,11 +163,11 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_HMSG_SPC:
-                if next_byte == Character.carriage_return:
+                if next_byte == carriage_return:
                     raise ProtocolError(next_byte, self._data_received)
-                elif next_byte == Character.newline:
+                elif next_byte == new_line:
                     raise ProtocolError(next_byte, self._data_received)
-                elif next_byte == Character.space:
+                elif next_byte == space:
                     raise ProtocolError(next_byte, self._data_received)
                 else:
                     self._state = State.HMSG_ARG
@@ -167,8 +197,8 @@ class Parser300:
                         expected_header_size = int(raw_header_size)
                         expected_total_size = int(raw_total_size)
                         sid = int(raw_sid)
-                    except Exception as e:
-                        raise ProtocolError(next_byte, self._data_received) from e
+                    except Exception as exc:
+                        raise ProtocolError(next_byte, self._data_received) from exc
                     partial_msg = MsgEvent(
                         Operation.HMSG,
                         sid=sid,
@@ -185,7 +215,7 @@ class Parser300:
                     continue
 
             elif state == State.HMSG_END:
-                if next_byte == Character.newline:
+                if next_byte == new_line:
                     self._state = State.HMSG_PAYLOAD
                     self._data_received = self._data_received[cursor + 1 :]
                     cursor = 0
@@ -221,7 +251,7 @@ class Parser300:
                     continue
 
             elif state == State.OP_M:
-                if next_byte == Character.s or next_byte == Character.S:
+                if next_byte == s or next_byte == S:
                     self._state = State.OP_MS
                     cursor += 1
                     continue
@@ -229,7 +259,7 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_MS:
-                if next_byte == Character.g or next_byte == Character.G:
+                if next_byte == g or next_byte == G:
                     self._state = State.OP_MSG
                     cursor += 1
                     continue
@@ -237,7 +267,7 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_MSG:
-                if next_byte == Character.space:
+                if next_byte == space:
                     self._state = State.OP_MSG_SPC
                     cursor += 1
                     continue
@@ -245,11 +275,11 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_MSG_SPC:
-                if next_byte == Character.carriage_return:
+                if next_byte == carriage_return:
                     raise ProtocolError(next_byte, self._data_received)
-                elif next_byte == Character.newline:
+                elif next_byte == new_line:
                     raise ProtocolError(next_byte, self._data_received)
-                elif next_byte == Character.space:
+                elif next_byte == space:
                     raise ProtocolError(next_byte, self._data_received)
                 else:
                     self._state = State.MSG_ARG
@@ -272,8 +302,8 @@ class Parser300:
                     try:
                         sid = int(raw_sid)
                         expected_total_size = int(raw_total_size)
-                    except Exception as e:
-                        raise ProtocolError(next_byte, self._data_received) from e
+                    except Exception as exc:
+                        raise ProtocolError(next_byte, self._data_received) from exc
                     partial_msg = MsgEvent(
                         Operation.MSG,
                         sid=sid,
@@ -290,7 +320,7 @@ class Parser300:
                     continue
 
             elif state == State.MSG_END:
-                if next_byte == Character.newline:
+                if next_byte == new_line:
                     self._state = State.MSG_PAYLOAD
                     self._data_received = self._data_received[cursor + 1 :]
                     cursor = 0
@@ -317,7 +347,7 @@ class Parser300:
                     continue
 
             elif state == State.OP_I:
-                if next_byte == Character.n or next_byte == Character.N:
+                if next_byte == n or next_byte == N:
                     self._state = State.OP_IN
                     cursor += 1
                     continue
@@ -325,7 +355,7 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_IN:
-                if next_byte == Character.f or next_byte == Character.F:
+                if next_byte == f or next_byte == F:
                     self._state = State.OP_INF
                     cursor += 1
                     continue
@@ -333,7 +363,7 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_INF:
-                if next_byte == Character.o or next_byte == Character.O:
+                if next_byte == o or next_byte == O:
                     self._state = State.OP_INFO
                     cursor += 1
                     continue
@@ -341,7 +371,7 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_INFO:
-                if next_byte == Character.space:
+                if next_byte == space:
                     self._state = State.OP_INFO_SPC
                     cursor += 1
                     continue
@@ -349,7 +379,7 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_INFO_SPC:
-                if next_byte == Character.left_json_bracket:
+                if next_byte == left_json_bracket:
                     self._state = State.INFO_ARG
                     self._data_received = self._data_received[cursor:]
                     cursor = 1
@@ -372,7 +402,7 @@ class Parser300:
                     continue
 
             elif state == State.OP_PLUS:
-                if next_byte == Character.o or next_byte == Character.O:
+                if next_byte == o or next_byte == O:
                     self._state = State.OP_PLUS_O
                     cursor += 1
                     continue
@@ -380,7 +410,7 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_PLUS_O:
-                if next_byte == Character.k or next_byte == Character.K:
+                if next_byte == k or next_byte == K:
                     self._state = State.OP_PLUS_OK
                     cursor += 1
                     continue
@@ -388,7 +418,7 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_PLUS_OK:
-                if next_byte == Character.carriage_return:
+                if next_byte == carriage_return:
                     self._state = State.OP_END
                     self._data_received = self._data_received[cursor + 1 :]
                     cursor = 0
@@ -398,7 +428,7 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_MINUS:
-                if next_byte == Character.e or next_byte == Character.E:
+                if next_byte == e or next_byte == E:
                     self._state = State.OP_MINUS_E
                     cursor += 1
                     continue
@@ -406,7 +436,7 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_MINUS_E:
-                if next_byte == Character.r or next_byte == Character.R:
+                if next_byte == r or next_byte == R:
                     self._state = State.OP_MINUS_ER
                     cursor += 1
                     continue
@@ -414,7 +444,7 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_MINUS_ER:
-                if next_byte == Character.r or next_byte == Character.R:
+                if next_byte == r or next_byte == R:
                     self._state = State.OP_MINUS_ERR
                     cursor += 1
                     continue
@@ -422,7 +452,7 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_MINUS_ERR:
-                if next_byte == Character.space:
+                if next_byte == space:
                     self._state = State.OP_MINUS_ERR_SPC
                     cursor += 1
                     continue
@@ -430,9 +460,9 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_MINUS_ERR_SPC:
-                if next_byte == Character.carriage_return:
+                if next_byte == carriage_return:
                     raise ProtocolError(next_byte, self._data_received)
-                elif next_byte == Character.newline:
+                elif next_byte == new_line:
                     raise ProtocolError(next_byte, self._data_received)
                 else:
                     self._data_received = self._data_received[cursor:]
@@ -452,11 +482,11 @@ class Parser300:
                     yield None
                     continue
             elif state == State.OP_P:
-                if next_byte == Character.i or next_byte == Character.I:
+                if next_byte == i or next_byte == I:
                     self._state = State.OP_PI
                     cursor += 1
                     continue
-                elif next_byte == Character.o or next_byte == Character.O:
+                elif next_byte == o or next_byte == O:
                     self._state = State.OP_PO
                     cursor += 1
                     continue
@@ -464,7 +494,7 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_PI:
-                if next_byte == Character.n or next_byte == Character.N:
+                if next_byte == n or next_byte == N:
                     self._state = State.OP_PIN
                     cursor += 1
                     continue
@@ -472,7 +502,7 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_PIN:
-                if next_byte == Character.g or next_byte == Character.G:
+                if next_byte == g or next_byte == G:
                     self._state = State.OP_PING
                     cursor += 1
                     continue
@@ -480,7 +510,7 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_PING:
-                if next_byte == Character.carriage_return:
+                if next_byte == carriage_return:
                     self._state = State.OP_END
                     self._data_received = self._data_received[cursor + 1 :]
                     cursor = 0
@@ -490,14 +520,14 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_PO:
-                if next_byte == Character.n or next_byte == Character.N:
+                if next_byte == n or next_byte == N:
                     self._state = State.OP_PON
                     cursor += 1
                 else:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_PON:
-                if next_byte == Character.g or next_byte == Character.G:
+                if next_byte == g or next_byte == G:
                     self._state = State.OP_PONG
                     cursor += 1
                     continue
@@ -505,7 +535,7 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_PONG:
-                if next_byte == Character.carriage_return:
+                if next_byte == carriage_return:
                     self._state = State.OP_END
                     self._data_received = self._data_received[cursor + 1 :]
                     cursor = 0
@@ -515,7 +545,7 @@ class Parser300:
                     raise ProtocolError(next_byte, self._data_received)
 
             elif state == State.OP_END:
-                if next_byte == Character.newline:
+                if next_byte == new_line:
                     self._state = State.OP_START
                     self._data_received = self._data_received[cursor + 1 :]
                     cursor = 0
