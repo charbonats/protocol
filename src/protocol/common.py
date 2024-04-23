@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import json
-from collections import deque
 from dataclasses import dataclass
 from enum import IntEnum, auto
+from typing import Protocol
 
 
 class ProtocolError(Exception):
     """Protocol error."""
 
-    def __init__(self, invalid_byte: int, bad_value: bytes) -> None:
+    def __init__(self, invalid_byte: int, bad_value: bytearray) -> None:
         self.bad_value = bad_value
         self.invalid_byte = invalid_byte
         super().__init__(f"unexpected byte: {bytes([invalid_byte])}")
@@ -137,8 +137,8 @@ class MsgEvent(Event):
     sid: int
     subject: str
     reply_to: str
-    payload: bytes
-    header: bytes
+    payload: bytearray
+    header: bytearray
 
 
 @dataclass
@@ -151,7 +151,7 @@ class Version:
     def as_string(self) -> str:
         return f"{self.major}.{self.minor}.{self.patch}-{self.dev}"
 
-    def __eq__(self, other: "Version") -> bool:
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, Version):
             return False
         return (
@@ -162,8 +162,9 @@ class Version:
         )
 
     def __gt__(self, other: "Version") -> bool:
-        if not isinstance(other, Version):
-            raise TypeError("unorderable types: Version() > {}".format(type(other)))
+        assert isinstance(
+            other, Version
+        ), f"cannot compare version with type {type(other)}"
         if self.major > other.major:
             return True
         if self.major == other.major:
@@ -204,6 +205,12 @@ class InfoEvent(Event):
     cluster: str | None
     domain: str | None
     xkey: str | None
+
+
+class Parser(Protocol):
+    def parse(self, data: bytes) -> None: ...
+
+    def events_received(self) -> list[Event]: ...
 
 
 CRLF = bytes([Character.carriage_return, Character.newline])
@@ -256,20 +263,3 @@ def parse_version(version: str) -> Version:
     if n > 3:
         semver.patch = int(tokens[2])
     return semver
-
-
-def make_history(max_length: int) -> deque[State]:
-    if max_length < -1:
-        raise ValueError(
-            "history must be -1, 0 or a positive integer. "
-            "-1 means unlimited history. "
-            "0 means no history. "
-            "A positive integer means the maximum number of states to keep in history excluding the current state."
-        )
-    if __debug__:
-        maxlen = max_length + 1 if max_length >= 0 else None
-    else:
-        if max_length:
-            raise ValueError("history is only available in debug mode")
-        maxlen = 1
-    return deque([State.OP_START], maxlen=maxlen)

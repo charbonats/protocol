@@ -1,9 +1,4 @@
-import sys
+from .choices import Backend, make_parser
+from .common import Parser
 
-if sys.version_info[1] >= 10:
-    from .parser_310 import Parser
-else:
-    from .parser_300 import Parser
-
-
-__all__ = ["Parser"]
+__all__ = ["Parser", "Backend", "make_parser"]

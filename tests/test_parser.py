@@ -2,6 +2,7 @@ import itertools
 import json
 
 import pytest
+from protocol import Backend, make_parser
 from protocol.common import (
     ErrorEvent,
     Event,
@@ -9,11 +10,9 @@ from protocol.common import (
     MsgEvent,
     Operation,
     ProtocolError,
-    State,
     Version,
 )
-from protocol.parser_300 import Parser as Parser300
-from protocol.parser_310 import Parser as Parser310
+from protocol.parser_re import Parser as ParserRe
 
 
 def fuzz_case(string: str, suffix: str | None = None) -> list[str]:
@@ -53,7 +52,7 @@ def make_server_info(
     domain: str | None = None,
     xkey: str | None = None,
 ) -> str:
-    info_dict = {
+    info_dict: dict[str, object] = {
         "server_id": server_id,
         "server_name": server_name,
         "version": version,
@@ -99,61 +98,38 @@ def make_server_info(
 
 
 @pytest.mark.parametrize(
-    "parser", [Parser300, Parser310], ids=["parser<3.10", "parser>=3.10"]
+    "backend",
+    [Backend.PARSER_300, Backend.PARSER_310, Backend.PARSER_RE],
 )
 class TestParserBasic:
     @pytest.fixture(autouse=True)
-    def setup(self, parser: type[Parser300] | type[Parser310]) -> None:
-        self.parser_factory = parser
+    def setup(self, backend: Backend) -> None:
+        self.parser = make_parser(backend)
 
-    def parse_text(self, data: str) -> tuple[list[State], list[Event]]:
-        parser = self.parser_factory(debug_max_history=-1)
-        parser.parse(data.encode("ascii"))
-        return parser.history(), parser.events()
+    def parse_text(self, data: str) -> list[Event]:
+        self.parser.parse(data.encode("ascii"))
+        if isinstance(self.parser, ParserRe):
+            return self.parser.events_received()
+        else:
+            return self.parser.events_received()
 
     @pytest.mark.parametrize("data", fuzz_case("ping", "\r\n"))
     def test_parse_ping(self, data: str):
-        history, events = self.parse_text(data)
-        assert history == [
-            State.OP_START,
-            State.OP_P,
-            State.OP_PI,
-            State.OP_PIN,
-            State.OP_PING,
-            State.OP_END,
-            State.OP_START,
-        ]
+        events = self.parse_text(data)
         assert events == [
             Event(operation=Operation.PING),
         ]
 
     @pytest.mark.parametrize("data", fuzz_case("pong", "\r\n"))
     def test_parse_pong(self, data: str):
-        history, events = self.parse_text(data)
-        assert history == [
-            State.OP_START,
-            State.OP_P,
-            State.OP_PO,
-            State.OP_PON,
-            State.OP_PONG,
-            State.OP_END,
-            State.OP_START,
-        ]
+        events = self.parse_text(data)
         assert events == [
             Event(operation=Operation.PONG),
         ]
 
     @pytest.mark.parametrize("data", fuzz_case("+ok", "\r\n"))
     def test_parse_ok(self, data: str):
-        history, events = self.parse_text(data)
-        assert history == [
-            State.OP_START,
-            State.OP_PLUS,
-            State.OP_PLUS_O,
-            State.OP_PLUS_OK,
-            State.OP_END,
-            State.OP_START,
-        ]
+        events = self.parse_text(data)
         assert events == [
             Event(operation=Operation.OK),
         ]
@@ -162,36 +138,15 @@ class TestParserBasic:
         "data", fuzz_case("-err", " this is the error message\r\n")
     )
     def test_parse_err(self, data: str):
-        history, events = self.parse_text(data)
-        assert history == [
-            State.OP_START,
-            State.OP_MINUS,
-            State.OP_MINUS_E,
-            State.OP_MINUS_ER,
-            State.OP_MINUS_ERR,
-            State.OP_MINUS_ERR_SPC,
-            State.MINUS_ERR_ARG,
-            State.OP_END,
-            State.OP_START,
-        ]
+        if isinstance(self.parser, ParserRe):
+            pytest.skip("ParserRe does not parse errors yet")
+        events = self.parse_text(data)
         assert events == [
             ErrorEvent(operation=Operation.ERR, message="this is the error message"),
         ]
 
     def test_parse_msg_with_empty_payload(self):
-        history, events = self.parse_text("msg the.subject 1234 0\r\n\r\n")
-        assert history == [
-            State.OP_START,
-            State.OP_M,
-            State.OP_MS,
-            State.OP_MSG,
-            State.OP_MSG_SPC,
-            State.MSG_ARG,
-            State.MSG_END,
-            State.MSG_PAYLOAD,
-            State.OP_END,
-            State.OP_START,
-        ]
+        events = self.parse_text("msg the.subject 1234 0\r\n\r\n")
         assert events == [
             MsgEvent(
                 operation=Operation.MSG,
@@ -204,21 +159,7 @@ class TestParserBasic:
         ]
 
     def test_parse_msg_with_reply_and_empty_payload(self):
-        history, events = self.parse_text(
-            "msg the.subject 1234 the.reply.subject 0\r\n\r\n"
-        )
-        assert history == [
-            State.OP_START,
-            State.OP_M,
-            State.OP_MS,
-            State.OP_MSG,
-            State.OP_MSG_SPC,
-            State.MSG_ARG,
-            State.MSG_END,
-            State.MSG_PAYLOAD,
-            State.OP_END,
-            State.OP_START,
-        ]
+        events = self.parse_text("msg the.subject 1234 the.reply.subject 0\r\n\r\n")
         assert events == [
             MsgEvent(
                 operation=Operation.MSG,
@@ -234,19 +175,7 @@ class TestParserBasic:
         "data", fuzz_case("msg", " the.subject 1234 12\r\nhello world!\r\n")
     )
     def test_parse_msg(self, data: str):
-        history, events = self.parse_text(data)
-        assert history == [
-            State.OP_START,
-            State.OP_M,
-            State.OP_MS,
-            State.OP_MSG,
-            State.OP_MSG_SPC,
-            State.MSG_ARG,
-            State.MSG_END,
-            State.MSG_PAYLOAD,
-            State.OP_END,
-            State.OP_START,
-        ]
+        events = self.parse_text(data)
         assert events == [
             MsgEvent(
                 operation=Operation.MSG,
@@ -263,19 +192,7 @@ class TestParserBasic:
         fuzz_case("msg", " the.subject 1234 the.reply.subject 12\r\nhello world!\r\n"),
     )
     def test_parse_msg_with_reply(self, data: str):
-        history, events = self.parse_text(data)
-        assert history == [
-            State.OP_START,
-            State.OP_M,
-            State.OP_MS,
-            State.OP_MSG,
-            State.OP_MSG_SPC,
-            State.MSG_ARG,
-            State.MSG_END,
-            State.MSG_PAYLOAD,
-            State.OP_END,
-            State.OP_START,
-        ]
+        events = self.parse_text(data)
         assert events == [
             MsgEvent(
                 operation=Operation.MSG,
@@ -288,20 +205,9 @@ class TestParserBasic:
         ]
 
     def test_parse_hmsg_with_empty_header_and_empty_payload(self):
-        history, events = self.parse_text("hmsg the.subject 1234 4 4\r\n\r\n\r\n\r\n")
-        assert history == [
-            State.OP_START,
-            State.OP_H,
-            State.OP_HM,
-            State.OP_HMS,
-            State.OP_HMSG,
-            State.OP_HMSG_SPC,
-            State.HMSG_ARG,
-            State.HMSG_END,
-            State.HMSG_PAYLOAD,
-            State.OP_END,
-            State.OP_START,
-        ]
+        if isinstance(self.parser, ParserRe):
+            pytest.skip("ParserRe does not parse headers yet")
+        events = self.parse_text("hmsg the.subject 1234 4 4\r\n\r\n\r\n\r\n")
         assert events == [
             MsgEvent(
                 operation=Operation.HMSG,
@@ -314,22 +220,11 @@ class TestParserBasic:
         ]
 
     def test_parse_hmsg_with_header_and_empty_payload(self):
-        history, events = self.parse_text(
+        if isinstance(self.parser, ParserRe):
+            pytest.skip("ParserRe does not parse headers yet")
+        events = self.parse_text(
             "hmsg the.subject 1234 22 22\r\nNATS/1.0\r\nFoo: Bar\r\n\r\n\r\n"
         )
-        assert history == [
-            State.OP_START,
-            State.OP_H,
-            State.OP_HM,
-            State.OP_HMS,
-            State.OP_HMSG,
-            State.OP_HMSG_SPC,
-            State.HMSG_ARG,
-            State.HMSG_END,
-            State.HMSG_PAYLOAD,
-            State.OP_END,
-            State.OP_START,
-        ]
         assert events == [
             MsgEvent(
                 operation=Operation.HMSG,
@@ -346,20 +241,9 @@ class TestParserBasic:
         ["hmsg the.subject 1234 18 30\r\nNATS/1.0\r\nA: B\r\n\r\nhello world!\r\n"],
     )
     def test_parse_hmsg(self, data: str):
-        history, events = self.parse_text(data)
-        assert history == [
-            State.OP_START,
-            State.OP_H,
-            State.OP_HM,
-            State.OP_HMS,
-            State.OP_HMSG,
-            State.OP_HMSG_SPC,
-            State.HMSG_ARG,
-            State.HMSG_END,
-            State.HMSG_PAYLOAD,
-            State.OP_END,
-            State.OP_START,
-        ]
+        if isinstance(self.parser, ParserRe):
+            pytest.skip("ParserRe does not parse headers yet")
+        events = self.parse_text(data)
         assert events == [
             MsgEvent(
                 operation=Operation.HMSG,
@@ -378,20 +262,9 @@ class TestParserBasic:
         ],
     )
     def test_parse_hmsg_with_reply(self, data: str):
-        history, events = self.parse_text(data)
-        assert history == [
-            State.OP_START,
-            State.OP_H,
-            State.OP_HM,
-            State.OP_HMS,
-            State.OP_HMSG,
-            State.OP_HMSG_SPC,
-            State.HMSG_ARG,
-            State.HMSG_END,
-            State.HMSG_PAYLOAD,
-            State.OP_END,
-            State.OP_START,
-        ]
+        if isinstance(self.parser, ParserRe):
+            pytest.skip("ParserRe does not parse headers yet")
+        events = self.parse_text(data)
         assert events == [
             MsgEvent(
                 operation=Operation.HMSG,
@@ -404,18 +277,7 @@ class TestParserBasic:
         ]
 
     def test_parse_info(self):
-        history, events = self.parse_text(make_server_info())
-        assert history == [
-            State.OP_START,
-            State.OP_I,
-            State.OP_IN,
-            State.OP_INF,
-            State.OP_INFO,
-            State.OP_INFO_SPC,
-            State.INFO_ARG,
-            State.OP_END,
-            State.OP_START,
-        ]
+        events = self.parse_text(make_server_info())
         assert events == [
             InfoEvent(
                 operation=Operation.INFO,
@@ -449,22 +311,7 @@ class TestParserBasic:
 
     @pytest.mark.parametrize("data", ["ping\r\npong\r\n"])
     def test_parse_ping_pong(self, data: str):
-        history, events = self.parse_text(data)
-        assert history == [
-            State.OP_START,
-            State.OP_P,
-            State.OP_PI,
-            State.OP_PIN,
-            State.OP_PING,
-            State.OP_END,
-            State.OP_START,
-            State.OP_P,
-            State.OP_PO,
-            State.OP_PON,
-            State.OP_PONG,
-            State.OP_END,
-            State.OP_START,
-        ]
+        events = self.parse_text(data)
         assert events == [
             Event(operation=Operation.PING),
             Event(operation=Operation.PONG),
@@ -472,21 +319,7 @@ class TestParserBasic:
 
     @pytest.mark.parametrize("data", ["ping\r\n+ok\r\n"])
     def test_parse_ping_ok(self, data: str):
-        history, events = self.parse_text(data)
-        assert history == [
-            State.OP_START,
-            State.OP_P,
-            State.OP_PI,
-            State.OP_PIN,
-            State.OP_PING,
-            State.OP_END,
-            State.OP_START,
-            State.OP_PLUS,
-            State.OP_PLUS_O,
-            State.OP_PLUS_OK,
-            State.OP_END,
-            State.OP_START,
-        ]
+        events = self.parse_text(data)
         assert events == [
             Event(operation=Operation.PING),
             Event(operation=Operation.OK),
@@ -496,26 +329,9 @@ class TestParserBasic:
         "data", ["-err the error message\r\n-err the other error message\r\n"]
     )
     def test_parse_err_err(self, data: str):
-        history, events = self.parse_text(data)
-        assert history == [
-            State.OP_START,
-            State.OP_MINUS,
-            State.OP_MINUS_E,
-            State.OP_MINUS_ER,
-            State.OP_MINUS_ERR,
-            State.OP_MINUS_ERR_SPC,
-            State.MINUS_ERR_ARG,
-            State.OP_END,
-            State.OP_START,
-            State.OP_MINUS,
-            State.OP_MINUS_E,
-            State.OP_MINUS_ER,
-            State.OP_MINUS_ERR,
-            State.OP_MINUS_ERR_SPC,
-            State.MINUS_ERR_ARG,
-            State.OP_END,
-            State.OP_START,
-        ]
+        if isinstance(self.parser, ParserRe):
+            pytest.skip("ParserRe does not parse errors yet")
+        events = self.parse_text(data)
         assert events == [
             ErrorEvent(operation=Operation.ERR, message="the error message"),
             ErrorEvent(operation=Operation.ERR, message="the other error message"),
@@ -556,22 +372,9 @@ class TestParserBasic:
         ],
     )
     def test_parse_msg_in_several_chunks(self, chunks: list[bytes]):
-        parser = self.parser_factory(debug_max_history=-1)
         for chunk in chunks:
-            parser.parse(chunk)
-        history, events = parser.history(), parser.events()
-        assert history == [
-            State.OP_START,
-            State.OP_M,
-            State.OP_MS,
-            State.OP_MSG,
-            State.OP_MSG_SPC,
-            State.MSG_ARG,
-            State.MSG_END,
-            State.MSG_PAYLOAD,
-            State.OP_END,
-            State.OP_START,
-        ]
+            self.parser.parse(chunk)
+        events = self.parser.events_received()
         assert events == [
             MsgEvent(
                 operation=Operation.MSG,
@@ -618,22 +421,9 @@ class TestParserBasic:
         ],
     )
     def test_parse_msg_with_reply_in_several_chunks(self, chunks: list[bytes]):
-        parser = self.parser_factory(debug_max_history=-1)
         for chunk in chunks:
-            parser.parse(chunk)
-        history, events = parser.history(), parser.events()
-        assert history == [
-            State.OP_START,
-            State.OP_M,
-            State.OP_MS,
-            State.OP_MSG,
-            State.OP_MSG_SPC,
-            State.MSG_ARG,
-            State.MSG_END,
-            State.MSG_PAYLOAD,
-            State.OP_END,
-            State.OP_START,
-        ]
+            self.parser.parse(chunk)
+        events = self.parser.events_received()
         assert events == [
             MsgEvent(
                 operation=Operation.MSG,
@@ -646,6 +436,8 @@ class TestParserBasic:
         ]
 
     def test_parse_invalid(self):
+        if isinstance(self.parser, ParserRe):
+            pytest.skip("ParserRe does not parse errors yet")
         with pytest.raises(ProtocolError) as exc:
             self.parse_text("invalid\r\n")
         assert exc.match("unexpected byte: b'v'")
