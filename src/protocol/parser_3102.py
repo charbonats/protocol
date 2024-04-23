@@ -69,98 +69,90 @@ class Parser3102:
                     match next_byte:
                         # case "m" | "M"
                         case 77 | 109:
-                            # Fast path for MSG
-                            if CRLF in self._data_received:
+                            try:
                                 end = self._data_received.index(CRLF)
-                                data = self._data_received[4:end]
-                                args = data.decode().split(" ")
-                                nbargs = len(args)
-                                match nbargs:
-                                    case 4:
-                                        subject, raw_sid, reply_to, raw_total_size = (
-                                            args
-                                        )
-                                    case 3:
-                                        reply_to = ""
-                                        subject, raw_sid, raw_total_size = args
-                                    case _:
-                                        raise ProtocolError(
-                                            next_byte, self._data_received
-                                        )
-                                try:
-                                    sid = int(raw_sid)
-                                    expected_total_size = int(raw_total_size)
-                                except Exception as e:
-                                    raise ProtocolError(
-                                        next_byte, self._data_received
-                                    ) from e
-                                partial_msg = MsgEvent(
-                                    Operation.MSG,
-                                    sid=sid,
-                                    subject=subject,
-                                    reply_to=reply_to,
-                                    payload=bytearray(),
-                                    header=bytearray(),
-                                )
-                                state = State3102.AWAITING_MSG_PAYLOAD
-                                self._data_received: bytearray = self._data_received[
-                                    end + 2 :
-                                ]
-                                continue
-                            # Split buffer
-                            else:
+                            except ValueError:
                                 yield None
                                 continue
+
+                            data = self._data_received[4:end]
+                            args = data.decode().split(" ")
+                            nbargs = len(args)
+                            match nbargs:
+                                case 4:
+                                    subject, raw_sid, reply_to, raw_total_size = args
+                                case 3:
+                                    reply_to = ""
+                                    subject, raw_sid, raw_total_size = args
+                                case _:
+                                    raise ProtocolError(next_byte, self._data_received)
+                            try:
+                                sid = int(raw_sid)
+                                expected_total_size = int(raw_total_size)
+                            except Exception as e:
+                                raise ProtocolError(
+                                    next_byte, self._data_received
+                                ) from e
+                            partial_msg = MsgEvent(
+                                Operation.MSG,
+                                sid=sid,
+                                subject=subject,
+                                reply_to=reply_to,
+                                payload=bytearray(),
+                                header=bytearray(),
+                            )
+                            state = State3102.AWAITING_MSG_PAYLOAD
+                            self._data_received: bytearray = self._data_received[
+                                end + 2 :
+                            ]
+                            continue
                         # case "H" | "h"
                         case 72 | 104:
                             # Fast path for HMSG
-                            if CRLF in self._data_received:
+                            try:
                                 end = self._data_received.index(CRLF)
-                                args = self._data_received[5:end].decode().split(" ")
-                                match len(args):
-                                    case 5:
-                                        (
-                                            subject,
-                                            raw_sid,
-                                            reply_to,
-                                            raw_header_size,
-                                            raw_total_size,
-                                        ) = args
-                                    case 4:
-                                        reply_to = ""
-                                        (
-                                            subject,
-                                            raw_sid,
-                                            raw_header_size,
-                                            raw_total_size,
-                                        ) = args
-                                    case _:
-                                        raise ProtocolError(
-                                            next_byte, self._data_received
-                                        )
-                                try:
-                                    expected_header_size = int(raw_header_size)
-                                    expected_total_size = int(raw_total_size)
-                                    sid = int(raw_sid)
-                                except Exception as e:
-                                    raise ProtocolError(
-                                        next_byte, self._data_received
-                                    ) from e
-                                partial_msg = MsgEvent(
-                                    Operation.HMSG,
-                                    sid=sid,
-                                    subject=subject,
-                                    reply_to=reply_to,
-                                    payload=bytearray(),
-                                    header=bytearray(),
-                                )
-                                state = State3102.AWAITING_HMSG_PAYLOAD
-                                self._data_received = self._data_received[end + 2 :]
-                                continue
-                            # Split buffer
-                            else:
+                            except ValueError:
                                 yield None
                                 continue
+                            args = self._data_received[5:end].decode().split(" ")
+                            match len(args):
+                                case 5:
+                                    (
+                                        subject,
+                                        raw_sid,
+                                        reply_to,
+                                        raw_header_size,
+                                        raw_total_size,
+                                    ) = args
+                                case 4:
+                                    reply_to = ""
+                                    (
+                                        subject,
+                                        raw_sid,
+                                        raw_header_size,
+                                        raw_total_size,
+                                    ) = args
+                                case _:
+                                    raise ProtocolError(next_byte, self._data_received)
+                            try:
+                                expected_header_size = int(raw_header_size)
+                                expected_total_size = int(raw_total_size)
+                                sid = int(raw_sid)
+                            except Exception as e:
+                                raise ProtocolError(
+                                    next_byte, self._data_received
+                                ) from e
+                            partial_msg = MsgEvent(
+                                Operation.HMSG,
+                                sid=sid,
+                                subject=subject,
+                                reply_to=reply_to,
+                                payload=bytearray(),
+                                header=bytearray(),
+                            )
+                            state = State3102.AWAITING_HMSG_PAYLOAD
+                            self._data_received = self._data_received[end + 2 :]
+                            continue
                         # case "P" | "p"
                         case 80 | 112:
                             # Fast path for PING or PONG
