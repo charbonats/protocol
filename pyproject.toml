@@ -3,7 +3,7 @@ name = "protocol"
 version = "0.1.0"
 description = "Add your description here"
 authors = [
-    { name = "Guillaume Charbonnier", email = "guillaume.charbonnier@araymond.com" }
+    { name = "Guillaume Charbonnier", email = "guillaume.charbonnier@araymond.com" },
 ]
 dependencies = []
 readme = "README.md"
@@ -15,11 +15,7 @@ build-backend = "hatchling.build"
 
 [tool.rye]
 managed = true
-dev-dependencies = [
-    "pytest>=8.1.1",
-    "pyright>=1.1.359",
-    "coverage>=7.4.4",
-]
+dev-dependencies = ["pytest>=8.1.1", "pyright>=1.1.359", "coverage>=7.4.4"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
@@ -44,7 +40,14 @@ htmlcov = "python -m http.server 8080 --directory coverage-report"
 # Automate pre-commit
 pre = { chain = ["format", "lint", "test", "typecheck"] }
 # Automate CI
-ci-full = { chain = ["bootstrap", "lint", "formatcheck", "test", "typecheck", "bench"] }
+ci-full = { chain = [
+    "bootstrap",
+    "lint",
+    "formatcheck",
+    "test",
+    "typecheck",
+    "bench",
+] }
 ci-lint = { chain = ["bootstrap", "lint"] }
 ci-format = { chain = ["bootstrap", "formatcheck"] }
 ci-test = { chain = ["bootstrap", "test"] }
@@ -62,7 +65,11 @@ lint = "rye lint"
 format = "rye fmt"
 formatcheck = "rye fmt --check"
 # Run benchmarks
-bench = { chain = ["__bench_ping_pong", "__bench_msg_hmsg", "__bench_msg_ping_pong_msg"] }
+bench = { chain = [
+    "__bench_ping_pong",
+    "__bench_msg_hmsg",
+    "__bench_msg_ping_pong_msg",
+] }
 # Clear cache
 clear = { chain = ["__clear_pycache", "__clear_bench", "__clear_dist"] }
 __clear_bench = "rm -rf ./bench"
@@ -75,27 +82,33 @@ __install-project = "rye sync --no-lock --force"
 __bench_ping_pong = { chain = [
     "__bench_ping_pong_300",
     "__bench_ping_pong_310",
+    "__bench_ping_pong_3102",
     "__bench_ping_pong_re",
 ] }
 __bench_msg_hmsg = { chain = [
     "__bench_msg_hmsg_300",
     "__bench_msg_hmsg_310",
+    "__bench_msg_hmsg_3102",
     "__bench_msg_hmsg_re",
 ] }
 __bench_msg_ping_pong_msg = { chain = [
     "__bench_msg_ping_pong_msg_300",
     "__bench_msg_ping_pong_msg_310",
+    "__bench_msg_ping_pong_msg_3102",
     "__bench_msg_ping_pong_msg_re",
 ] }
-__bench_ping_pong_300 = "python -m benchmarks -s ping_pong -o bench -p 300"
-__bench_ping_pong_310 = "python -m benchmarks -s ping_pong -o bench -p 310"
-__bench_ping_pong_re = "python -m benchmarks -s ping_pong -o bench -p re"
-__bench_msg_hmsg_300 = "python -m benchmarks -s msg_hmsg -o bench -p 300"
-__bench_msg_hmsg_310 = "python -m benchmarks -s msg_hmsg -o bench -p 310"
-__bench_msg_hmsg_re = "python -m benchmarks -s msg_hmsg -o bench -p re"
-__bench_msg_ping_pong_msg_300 = "python -m benchmarks -s msg_ping_pong_msg -o bench -p 300"
-__bench_msg_ping_pong_msg_310 = "python -m benchmarks -s msg_ping_pong_msg -o bench -p 310"
-__bench_msg_ping_pong_msg_re = "python -m benchmarks -s msg_ping_pong_msg -o bench -p re"
+__bench_ping_pong_300 = "python -O -m benchmarks -s ping_pong -o bench -p 300"
+__bench_ping_pong_310 = "python -O -m benchmarks -s ping_pong -o bench -p 310"
+__bench_ping_pong_3102 = "python -O -m benchmarks -s ping_pong -o bench -p 3102"
+__bench_ping_pong_re = "python -O -m benchmarks -s ping_pong -o bench -p re"
+__bench_msg_hmsg_300 = "python -O -m benchmarks -s msg_hmsg -o bench -p 300"
+__bench_msg_hmsg_310 = "python -O -m benchmarks -s msg_hmsg -o bench -p 310"
+__bench_msg_hmsg_3102 = "python -O -m benchmarks -s msg_hmsg -o bench -p 3102"
+__bench_msg_hmsg_re = "python -O -m benchmarks -s msg_hmsg -o bench -p re"
+__bench_msg_ping_pong_msg_300 = "python -O -m benchmarks -s msg_ping_pong_msg -o bench -p 300"
+__bench_msg_ping_pong_msg_310 = "python -O -m benchmarks -s msg_ping_pong_msg -o bench -p 310"
+__bench_msg_ping_pong_msg_3102 = "python -O -m benchmarks -s msg_ping_pong_msg -o bench -p 3102"
+__bench_msg_ping_pong_msg_re = "python -O -m benchmarks -s msg_ping_pong_msg -o bench -p re"
 
 [tool.coverage.run]
 source = ["src/protocol"]

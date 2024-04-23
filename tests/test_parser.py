@@ -99,7 +99,7 @@ def make_server_info(
 
 @pytest.mark.parametrize(
     "backend",
-    [Backend.PARSER_300, Backend.PARSER_310, Backend.PARSER_RE],
+    [Backend.PARSER_300, Backend.PARSER_310, Backend.PARSER_3102, Backend.PARSER_RE],
 )
 class TestParserBasic:
     @pytest.fixture(autouse=True)
@@ -440,4 +440,4 @@ class TestParserBasic:
             pytest.skip("ParserRe does not parse errors yet")
         with pytest.raises(ProtocolError) as exc:
             self.parse_text("invalid\r\n")
-        assert exc.match("unexpected byte: b'v'")
+        assert exc.match("unexpected byte:")

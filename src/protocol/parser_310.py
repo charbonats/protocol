@@ -195,6 +195,7 @@ class Parser310:
                             state = State.OP_MINUS
                             cursor += 1
                             continue
+                        # Anything else is an error
                         case _:
                             raise ProtocolError(next_byte, self._data_received)
                 case State.OP_H:

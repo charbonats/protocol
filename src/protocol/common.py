@@ -19,6 +19,12 @@ class ProtocolError(Exception):
         )
 
 
+class State3102(IntEnum):
+    AWAITING_CONTROL_LINE = 0
+    AWAITING_MSG_PAYLOAD = 1
+    AWAITING_HMSG_PAYLOAD = 2
+
+
 class State(IntEnum):
     OP_START = 0
     OP_PLUS = auto()
