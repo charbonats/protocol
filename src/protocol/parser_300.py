@@ -17,7 +17,6 @@ from .common import (
     HMsgEvent,
     MsgEvent,
     ProtocolError,
-    State3102,
     parse_info,
 )
 
@@ -26,6 +25,10 @@ PING_OP = bytearray(b"PING")
 PONG_OP = bytearray(b"PONG")
 PING_OR_PONG_LEN = len(PING_OP)
 PING_OR_PONG_OP_LEN = PING_OR_PONG_LEN + CRLF_SIZE
+
+AWAITING_CONTROL_LINE = 0
+AWAITING_MSG_PAYLOAD = 1
+AWAITING_HMSG_PAYLOAD = 2
 
 
 class Parser300:
@@ -57,7 +60,7 @@ class Parser300:
         expected_header_size = 0
         expected_total_size = 0
         partial_msg: MsgEvent | HMsgEvent | None = None
-        state = State3102.AWAITING_CONTROL_LINE
+        state = AWAITING_CONTROL_LINE
 
         while not self._closed:
             # If there is no data to parse, yield None.
@@ -67,7 +70,7 @@ class Parser300:
             # Take the first byte
             next_byte = self._data_received[0]
 
-            if state == State3102.AWAITING_CONTROL_LINE:
+            if state == AWAITING_CONTROL_LINE:
                 if next_byte == 77:  # "M"
                     try:
                         end = self._data_received.index(CRLF)
@@ -114,7 +117,7 @@ class Parser300:
                             reply_to=reply_to.decode(),
                             payload=bytearray(),
                         )
-                        state = State3102.AWAITING_MSG_PAYLOAD
+                        state = AWAITING_MSG_PAYLOAD
                         self._data_received: bytearray = self._data_received[end + 2 :]
                         yield None
                         continue
@@ -197,7 +200,7 @@ class Parser300:
                             payload=bytearray(),
                             header=bytearray(),
                         )
-                        state = State3102.AWAITING_HMSG_PAYLOAD
+                        state = AWAITING_HMSG_PAYLOAD
                         self._data_received = self._data_received[end + 2 :]
                         yield None
                         continue
@@ -254,22 +257,27 @@ class Parser300:
                 else:
                     # Anything else is an error
                     raise ProtocolError(next_byte, self._data_received)
-            elif state == State3102.AWAITING_HMSG_PAYLOAD:
+            elif state == AWAITING_HMSG_PAYLOAD:
                 assert partial_msg is not None, "pending_msg is None"
                 if len(self._data_received) >= expected_total_size + CRLF_SIZE:
-                    header = self._data_received[:expected_header_size]
-                    if header[-4:] != STOP_HEADER:
-                        raise ProtocolError(next_byte, header)
-                    partial_msg.header = header[:-4]
-                    payload = self._data_received[
+                    if (
+                        self._data_received[
+                            expected_header_size - 4 : expected_header_size
+                        ]
+                        != STOP_HEADER
+                    ):
+                        raise ProtocolError(
+                            next_byte, self._data_received[:expected_header_size]
+                        )
+                    partial_msg.header = self._data_received[
+                        expected_header_size - 4 : expected_header_size
+                    ]
+                    partial_msg.payload = self._data_received[
                         expected_header_size:expected_total_size
                     ]
-                    partial_msg.payload = payload
-                    self._data_received = self._data_received[
-                        expected_total_size + CRLF_SIZE + 1 :
-                    ]
+                    self._data_received = self._data_received[expected_total_size + 3 :]
                     self._events_received.append(partial_msg)
-                    state = State3102.AWAITING_CONTROL_LINE
+                    state = AWAITING_CONTROL_LINE
                     continue
                 else:
                     yield None
@@ -278,11 +286,9 @@ class Parser300:
                 assert partial_msg is not None, "pending_msg is None"
                 if len(self._data_received) >= expected_total_size + CRLF_SIZE:
                     partial_msg.payload = self._data_received[:expected_total_size]
-                    self._data_received = self._data_received[
-                        expected_total_size + CRLF_SIZE + 1 :
-                    ]
+                    self._data_received = self._data_received[expected_total_size + 3 :]
                     self._events_received.append(partial_msg)
-                    state = State3102.AWAITING_CONTROL_LINE
+                    state = AWAITING_CONTROL_LINE
                     continue
                 else:
                     yield None
