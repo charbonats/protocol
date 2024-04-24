@@ -22,10 +22,13 @@ import re
 from typing import TYPE_CHECKING, Any, Dict
 
 from .common import (
+    OK_EVENT,
+    PING_EVENT,
+    PONG_EVENT,
     ErrorEvent,
     Event,
+    HMsgEvent,
     MsgEvent,
-    Operation,
     parse_info,
 )
 
@@ -167,27 +170,27 @@ class ParserRE:
                 if ok:
                     # Do nothing and just skip.
                     del self.buf[: ok.end()]
-                    self._events.append(Event(Operation.OK))
+                    self._events.append(OK_EVENT)
                     continue
 
                 err = ERR_RE.match(self.buf)
                 if err:
                     err_msg = err.groups()
                     emsg = err_msg[0].decode().lower()
-                    self._events.append(ErrorEvent(Operation.ERR, emsg))
+                    self._events.append(ErrorEvent(emsg))
                     del self.buf[: err.end()]
                     continue
 
                 ping = PING_RE.match(self.buf)
                 if ping:
                     del self.buf[: ping.end()]
-                    self._events.append(Event(Operation.PING))
+                    self._events.append(PING_EVENT)
                     continue
 
                 pong = PONG_RE.match(self.buf)
                 if pong:
                     del self.buf[: pong.end()]
-                    self._events.append(Event(Operation.PONG))
+                    self._events.append(PONG_EVENT)
                     continue
 
                 info = INFO_RE.match(self.buf)
@@ -229,16 +232,25 @@ class ParserRE:
                         del self.buf[: self.needed + CRLF_SIZE]
 
                     self._state = AWAITING_CONTROL_LINE
-                    self._events.append(
-                        MsgEvent(
-                            Operation.HMSG if self.header_needed else Operation.MSG,
-                            sid,
-                            subject.decode(),
-                            reply.decode(),
-                            bytearray(payload),
-                            bytearray(hdr or b""),
+                    if self.header_needed:
+                        self._events.append(
+                            HMsgEvent(
+                                sid,
+                                subject.decode(),
+                                reply.decode(),
+                                bytearray(payload),
+                                bytearray(hdr or b""),
+                            )
                         )
-                    )
+                    else:
+                        self._events.append(
+                            MsgEvent(
+                                sid,
+                                subject.decode(),
+                                reply.decode(),
+                                bytearray(payload),
+                            )
+                        )
                 else:
                     # Wait until we have enough bytes in buffer.
                     yield None

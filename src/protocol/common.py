@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from enum import IntEnum, auto
 from typing import Protocol
 
@@ -25,95 +24,6 @@ class State3102(IntEnum):
     AWAITING_HMSG_PAYLOAD = 2
 
 
-class State(IntEnum):
-    OP_START = 0
-    OP_PLUS = auto()
-    OP_PLUS_O = auto()
-    OP_PLUS_OK = auto()
-    OP_MINUS = auto()
-    OP_MINUS_E = auto()
-    OP_MINUS_ER = auto()
-    OP_MINUS_ERR = auto()
-    OP_MINUS_ERR_SPC = auto()
-    MINUS_ERR_ARG = auto()
-    OP_M = auto()
-    OP_MS = auto()
-    OP_MSG = auto()
-    OP_MSG_SPC = auto()
-    MSG_ARG = auto()
-    MSG_PAYLOAD = auto()
-    MSG_END = auto()
-    OP_H = auto()
-    OP_HM = auto()
-    OP_HMS = auto()
-    OP_HMSG = auto()
-    OP_HMSG_SPC = auto()
-    HMSG_ARG = auto()
-    HMSG_END = auto()
-    HMSG_PAYLOAD = auto()
-    OP_P = auto()
-    OP_PI = auto()
-    OP_PIN = auto()
-    OP_PING = auto()
-    OP_PO = auto()
-    OP_PON = auto()
-    OP_PONG = auto()
-    OP_I = auto()
-    OP_IN = auto()
-    OP_INF = auto()
-    OP_INFO = auto()
-    OP_INFO_SPC = auto()
-    INFO_ARG = auto()
-    OP_END = auto()
-
-
-# +/-
-plus = ord("+")
-minus = ord("-")
-# ok
-o = ord("o")
-O = ord("O")  # noqa: E741
-k = ord("k")
-K = ord("K")
-# err
-e = ord("e")
-E = ord("E")
-r = ord("r")
-R = ord("R")
-# pub
-p = ord("p")
-P = ord("P")
-u = ord("u")
-U = ord("U")
-b = ord("b")
-B = ord("B")
-# sub
-s = ord("s")
-S = ord("S")
-# hpub
-h = ord("h")
-H = ord("H")
-# msg
-m = ord("m")
-M = ord("M")
-g = ord("g")
-G = ord("G")
-# ping
-i = ord("i")
-I = ord("I")  # noqa: E741
-n = ord("n")
-N = ord("N")
-# info
-f = ord("f")
-F = ord("F")
-# special characters
-space = ord(" ")
-tab = ord("\t")
-new_line = ord("\n")
-carriage_return = ord("\r")
-left_json_bracket = ord("{")
-
-
 class Operation(IntEnum):
     OK = 0
     ERR = auto()
@@ -124,37 +34,117 @@ class Operation(IntEnum):
     PONG = auto()
 
 
-@dataclass
 class Event:
     """NATS Protocol event."""
 
-    operation: Operation
+    __slots__ = ["operation"]
+
+    def __init__(self, op: Operation) -> None:
+        self.operation = op
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, type(self)):
+            return False
+        return all(
+            getattr(self, slot) == getattr(other, slot) for slot in self.__slots__
+        )
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({', '.join(f'{slot}={getattr(self, slot)!r}' for slot in self.__slots__)})"
 
 
-@dataclass
+class OkEvent(Event):
+    """NATS Protocol OK event."""
+
+    __slots__ = ["operation"]
+
+    def __init__(self) -> None:
+        super().__init__(Operation.OK)
+
+
+class PingEvent(Event):
+    """NATS Protocol ping event."""
+
+    __slots__ = ["operation"]
+
+    def __init__(self) -> None:
+        super().__init__(Operation.PING)
+
+
+class PongEvent(Event):
+    """NATS Protocol pong event."""
+
+    __slots__ = ["operation"]
+
+    def __init__(self) -> None:
+        super().__init__(Operation.PONG)
+
+
 class ErrorEvent(Event):
     """NATS Protocol error event."""
 
-    message: str
+    __slots__ = ["operation", "message"]
+
+    def __init__(self, message: str) -> None:
+        super().__init__(Operation.ERR)
+        self.message = message
 
 
-@dataclass
 class MsgEvent(Event):
     """NATS Protocol message event."""
 
-    sid: int
-    subject: str
-    reply_to: str
-    payload: bytearray
-    header: bytearray
+    __slots__ = ["operation", "sid", "subject", "reply_to", "payload", "header"]
+
+    def __init__(
+        self,
+        sid: int,
+        subject: str,
+        reply_to: str,
+        payload: bytearray,
+    ) -> None:
+        super().__init__(Operation.MSG)
+        self.sid = sid
+        self.subject = subject
+        self.reply_to = reply_to
+        self.payload = payload
+        self.header = bytearray()
 
 
-@dataclass
+class HMsgEvent(Event):
+    """NATS Protocol message event."""
+
+    __slots__ = ["operation", "sid", "subject", "reply_to", "payload", "header"]
+
+    def __init__(
+        self,
+        sid: int,
+        subject: str,
+        reply_to: str,
+        payload: bytearray,
+        header: bytearray,
+    ) -> None:
+        self.operation = Operation.HMSG
+        self.sid = sid
+        self.subject = subject
+        self.reply_to = reply_to
+        self.payload = payload
+        self.header = header
+
+
 class Version:
-    major: int
-    minor: int
-    patch: int
-    dev: str
+    __slots__ = ["major", "minor", "patch", "dev"]
+
+    def __init__(
+        self,
+        major: int,
+        minor: int,
+        patch: int,
+        dev: str,
+    ) -> None:
+        self.major = major
+        self.minor = minor
+        self.patch = patch
+        self.dev = dev
 
     def as_string(self) -> str:
         return f"{self.major}.{self.minor}.{self.patch}-{self.dev}"
@@ -186,33 +176,90 @@ class Version:
         return False
 
 
-@dataclass
 class InfoEvent(Event):
-    proto: int
-    server_id: str
-    server_name: str
-    version: Version
-    go: str
-    host: str
-    port: int
-    max_payload: int | None
-    headers: bool | None
-    client_id: int | None
-    auth_required: bool | None
-    tls_required: bool | None
-    tls_verify: bool | None
-    tls_available: bool | None
-    connect_urls: list[str] | None
-    ws_connect_urls: list[str] | None
-    ldm: bool | None
-    git_commit: str | None
-    jetstream: bool | None
-    ip: str | None
-    client_ip: str | None
-    nonce: str | None
-    cluster: str | None
-    domain: str | None
-    xkey: str | None
+    __slots__ = [
+        "operation",
+        "proto",
+        "server_id",
+        "server_name",
+        "version",
+        "go",
+        "host",
+        "port",
+        "max_payload",
+        "headers",
+        "client_id",
+        "auth_required",
+        "tls_required",
+        "tls_verify",
+        "tls_available",
+        "connect_urls",
+        "ws_connect_urls",
+        "ldm",
+        "git_commit",
+        "jetstream",
+        "ip",
+        "client_ip",
+        "nonce",
+        "cluster",
+        "domain",
+        "xkey",
+    ]
+
+    def __init__(
+        self,
+        proto: int,
+        server_id: str,
+        server_name: str,
+        version: Version,
+        go: str,
+        host: str,
+        port: int,
+        max_payload: int | None,
+        headers: bool | None,
+        client_id: int | None,
+        auth_required: bool | None,
+        tls_required: bool | None,
+        tls_verify: bool | None,
+        tls_available: bool | None,
+        connect_urls: list[str] | None,
+        ws_connect_urls: list[str] | None,
+        ldm: bool | None,
+        git_commit: str | None,
+        jetstream: bool | None,
+        ip: str | None,
+        client_ip: str | None,
+        nonce: str | None,
+        cluster: str | None,
+        domain: str | None,
+        xkey: str | None,
+    ) -> None:
+        self.operation = Operation.INFO
+        self.proto = proto
+        self.server_id = server_id
+        self.server_name = server_name
+        self.version = version
+        self.go = go
+        self.host = host
+        self.port = port
+        self.max_payload = max_payload
+        self.headers = headers
+        self.client_id = client_id
+        self.auth_required = auth_required
+        self.tls_required = tls_required
+        self.tls_verify = tls_verify
+        self.tls_available = tls_available
+        self.connect_urls = connect_urls
+        self.ws_connect_urls = ws_connect_urls
+        self.ldm = ldm
+        self.git_commit = git_commit
+        self.jetstream = jetstream
+        self.ip = ip
+        self.client_ip = client_ip
+        self.nonce = nonce
+        self.cluster = cluster
+        self.domain = domain
+        self.xkey = xkey
 
 
 class Parser(Protocol):
@@ -221,14 +268,17 @@ class Parser(Protocol):
     def events_received(self) -> list[Event]: ...
 
 
-CRLF = bytes([carriage_return, new_line])
+PING_EVENT = PingEvent()
+PONG_EVENT = PongEvent()
+OK_EVENT = OkEvent()
+
+CRLF = b"\r\n"
 CRLF_SIZE = len(CRLF)
 
 
 def parse_info(data: bytearray | bytes) -> InfoEvent:
     raw_info = json.loads(data.decode())
     return InfoEvent(
-        operation=Operation.INFO,
         server_id=raw_info["server_id"],
         server_name=raw_info["server_name"],
         version=parse_version(raw_info["version"]),

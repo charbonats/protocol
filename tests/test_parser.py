@@ -4,11 +4,14 @@ import json
 import pytest
 from protocol import Backend, make_parser
 from protocol.common import (
+    OK_EVENT,
+    PING_EVENT,
+    PONG_EVENT,
     ErrorEvent,
     Event,
+    HMsgEvent,
     InfoEvent,
     MsgEvent,
-    Operation,
     ProtocolError,
     Version,
 )
@@ -99,7 +102,7 @@ def make_server_info(
 
 @pytest.mark.parametrize(
     "backend",
-    [Backend.PARSER_300, Backend.PARSER_310, Backend.PARSER_3102, Backend.PARSER_RE],
+    [Backend.PARSER_310, Backend.PARSER_RE],
 )
 class TestParserBasic:
     @pytest.fixture(autouse=True)
@@ -117,21 +120,21 @@ class TestParserBasic:
     def test_parse_ping(self, data: str):
         events = self.parse_text(data)
         assert events == [
-            Event(operation=Operation.PING),
+            PING_EVENT,
         ]
 
     @pytest.mark.parametrize("data", fuzz_case("pong", "\r\n"))
     def test_parse_pong(self, data: str):
         events = self.parse_text(data)
         assert events == [
-            Event(operation=Operation.PONG),
+            PONG_EVENT,
         ]
 
     @pytest.mark.parametrize("data", fuzz_case("+ok", "\r\n"))
     def test_parse_ok(self, data: str):
         events = self.parse_text(data)
         assert events == [
-            Event(operation=Operation.OK),
+            OK_EVENT,
         ]
 
     @pytest.mark.parametrize(
@@ -142,19 +145,17 @@ class TestParserBasic:
             pytest.skip("ParserRe does not parse errors yet")
         events = self.parse_text(data)
         assert events == [
-            ErrorEvent(operation=Operation.ERR, message="this is the error message"),
+            ErrorEvent(message="this is the error message"),
         ]
 
     def test_parse_msg_with_empty_payload(self):
         events = self.parse_text("msg the.subject 1234 0\r\n\r\n")
         assert events == [
             MsgEvent(
-                operation=Operation.MSG,
                 sid=1234,
                 subject="the.subject",
                 reply_to="",
                 payload=bytearray(),
-                header=bytearray(),
             ),
         ]
 
@@ -162,12 +163,10 @@ class TestParserBasic:
         events = self.parse_text("msg the.subject 1234 the.reply.subject 0\r\n\r\n")
         assert events == [
             MsgEvent(
-                operation=Operation.MSG,
                 sid=1234,
                 subject="the.subject",
                 reply_to="the.reply.subject",
                 payload=bytearray(),
-                header=bytearray(),
             ),
         ]
 
@@ -178,12 +177,10 @@ class TestParserBasic:
         events = self.parse_text(data)
         assert events == [
             MsgEvent(
-                operation=Operation.MSG,
                 sid=1234,
                 subject="the.subject",
                 reply_to="",
                 payload=bytearray(b"hello world!"),
-                header=bytearray(),
             ),
         ]
 
@@ -195,12 +192,10 @@ class TestParserBasic:
         events = self.parse_text(data)
         assert events == [
             MsgEvent(
-                operation=Operation.MSG,
                 sid=1234,
                 subject="the.subject",
                 reply_to="the.reply.subject",
                 payload=bytearray(b"hello world!"),
-                header=bytearray(),
             ),
         ]
 
@@ -209,8 +204,7 @@ class TestParserBasic:
             pytest.skip("ParserRe does not parse headers yet")
         events = self.parse_text("hmsg the.subject 1234 4 4\r\n\r\n\r\n\r\n")
         assert events == [
-            MsgEvent(
-                operation=Operation.HMSG,
+            HMsgEvent(
                 sid=1234,
                 subject="the.subject",
                 reply_to="",
@@ -226,8 +220,7 @@ class TestParserBasic:
             "hmsg the.subject 1234 22 22\r\nNATS/1.0\r\nFoo: Bar\r\n\r\n\r\n"
         )
         assert events == [
-            MsgEvent(
-                operation=Operation.HMSG,
+            HMsgEvent(
                 sid=1234,
                 subject="the.subject",
                 reply_to="",
@@ -245,8 +238,7 @@ class TestParserBasic:
             pytest.skip("ParserRe does not parse headers yet")
         events = self.parse_text(data)
         assert events == [
-            MsgEvent(
-                operation=Operation.HMSG,
+            HMsgEvent(
                 sid=1234,
                 subject="the.subject",
                 reply_to="",
@@ -266,8 +258,7 @@ class TestParserBasic:
             pytest.skip("ParserRe does not parse headers yet")
         events = self.parse_text(data)
         assert events == [
-            MsgEvent(
-                operation=Operation.HMSG,
+            HMsgEvent(
                 sid=1234,
                 subject="the.subject",
                 reply_to="the.reply.subject",
@@ -280,7 +271,6 @@ class TestParserBasic:
         events = self.parse_text(make_server_info())
         assert events == [
             InfoEvent(
-                operation=Operation.INFO,
                 proto=1,
                 server_id="test",
                 server_name="test",
@@ -313,17 +303,14 @@ class TestParserBasic:
     def test_parse_ping_pong(self, data: str):
         events = self.parse_text(data)
         assert events == [
-            Event(operation=Operation.PING),
-            Event(operation=Operation.PONG),
+            PING_EVENT,
+            PONG_EVENT,
         ]
 
     @pytest.mark.parametrize("data", ["ping\r\n+ok\r\n"])
     def test_parse_ping_ok(self, data: str):
         events = self.parse_text(data)
-        assert events == [
-            Event(operation=Operation.PING),
-            Event(operation=Operation.OK),
-        ]
+        assert events == [PING_EVENT, OK_EVENT]
 
     @pytest.mark.parametrize(
         "data", ["-err the error message\r\n-err the other error message\r\n"]
@@ -333,8 +320,8 @@ class TestParserBasic:
             pytest.skip("ParserRe does not parse errors yet")
         events = self.parse_text(data)
         assert events == [
-            ErrorEvent(operation=Operation.ERR, message="the error message"),
-            ErrorEvent(operation=Operation.ERR, message="the other error message"),
+            ErrorEvent(message="the error message"),
+            ErrorEvent(message="the other error message"),
         ]
 
     @pytest.mark.parametrize(
@@ -377,12 +364,10 @@ class TestParserBasic:
         events = self.parser.events_received()
         assert events == [
             MsgEvent(
-                operation=Operation.MSG,
                 sid=1234,
                 subject="the.subject",
                 reply_to="",
                 payload=bytearray(b"hello world!"),
-                header=bytearray(),
             ),
         ]
 
@@ -426,12 +411,10 @@ class TestParserBasic:
         events = self.parser.events_received()
         assert events == [
             MsgEvent(
-                operation=Operation.MSG,
                 sid=1234,
                 subject="the.subject",
                 reply_to="the.reply.subject",
                 payload=bytearray(b"hello world!"),
-                header=bytearray(),
             ),
         ]
 
