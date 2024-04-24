@@ -1,4 +1,5 @@
 import json
+import sys
 
 import pytest
 from protocol import Backend, make_parser
@@ -95,6 +96,8 @@ def make_server_info(
 class TestParserBasic:
     @pytest.fixture(autouse=True)
     def setup(self, backend: Backend) -> None:
+        if sys.version_info < (3, 10) and backend == Backend.PARSER_310:
+            pytest.skip("Parser 3.10 is not available in this Python version")
         self.parser = make_parser(backend)
 
     def parse_text(self, data: str) -> list[Event]:
