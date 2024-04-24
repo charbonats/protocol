@@ -57,6 +57,7 @@ ci-full = { chain = [
 ci-lint = { chain = ["bootstrap", "lint"] }
 ci-format = { chain = ["bootstrap", "formatcheck"] }
 ci-test = { chain = ["bootstrap", "test"] }
+ci-test-without-coverage = { chain = ["bootstrap", "__test_without_coverage"] }
 ci-bench = { chain = ["bootstrap", "bench"] }
 ci-typecheck = { chain = ["bootstrap", "typecheck"] }
 # Automate project install
@@ -83,6 +84,7 @@ __clear_bench = "rm -rf ./bench"
 __clear_pycache = "find . -type d -name __pycache__ -exec rm -rf {} +"
 __clear_dist = "rm -rf ./dist"
 # Private commands
+__test_without_coverage = "pytest -vvv"
 __test = "coverage run --rcfile=pyproject.toml -m pytest -vvv"
 __coverage-html = "coverage html"
 __install-project = "rye sync --no-lock --force"

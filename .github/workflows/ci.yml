@@ -87,7 +87,7 @@ jobs:
           echo "${{ matrix.python-version }}" > .python-version
 
       - name: Run pytest
-        run: rye run ci-test
+        run: rye run ci-test-without-coverage
 
   typecheck:
     name: Typecheck (pyright)
