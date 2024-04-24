@@ -25,6 +25,7 @@ STOP_OP = bytearray(CRLF)
 STOP_HEADER = bytearray(b"\r\n\r\n")
 PING_OP = bytearray(b"PING")
 PONG_OP = bytearray(b"PONG")
+OK_OP = bytearray(b"+OK\r\n")
 PING_OR_PONG_LEN = len(PING_OP)
 PING_OR_PONG_OP_LEN = PING_OR_PONG_LEN + CRLF_SIZE
 
@@ -65,12 +66,14 @@ class Parser310:
             if not self._data_received:
                 yield None
                 continue
+
             # Take the first byte
             next_byte = self._data_received[0]
 
             match state:
                 case State3102.AWAITING_CONTROL_LINE:
                     match next_byte:
+                        # case "M": Fast path for MSG
                         case 77:
                             try:
                                 end = self._data_received.index(CRLF)
@@ -95,24 +98,22 @@ class Parser310:
                                 raise ProtocolError(
                                     next_byte, self._data_received
                                 ) from e
-                            payload_start = end + 2
                             if (
-                                len(self._data_received[payload_start:])
+                                len(self._data_received[end + 2 :])
                                 >= expected_total_size + CRLF_SIZE
                             ):
-                                payload_end = payload_start + expected_total_size
                                 self._events_received.append(
                                     MsgEvent(
                                         sid=sid,
                                         subject=subject.decode(),
                                         reply_to=reply_to.decode(),
                                         payload=self._data_received[
-                                            payload_start:payload_end
+                                            end + 2 : end + 2 + expected_total_size
                                         ],
                                     )
                                 )
                                 self._data_received = self._data_received[
-                                    payload_end + CRLF_SIZE + 1 :
+                                    end + expected_total_size + 7 :
                                 ]
                                 continue
                             else:
@@ -124,13 +125,12 @@ class Parser310:
                                 )
                                 state = State3102.AWAITING_MSG_PAYLOAD
                                 self._data_received: bytearray = self._data_received[
-                                    payload_start:
+                                    end + 2 :
                                 ]
                                 yield None
                                 continue
-                        # case "H"
+                        # case "H": Fast path for HMSG
                         case 72:
-                            # Fast path for HMSG
                             try:
                                 end = self._data_received.index(CRLF)
                             except ValueError:
@@ -164,29 +164,41 @@ class Parser310:
                                 raise ProtocolError(
                                     next_byte, self._data_received
                                 ) from e
-                            header_start = end + 2
                             if (
-                                len(self._data_received[header_start:])
+                                len(self._data_received[end + 2 :])
                                 >= expected_total_size + CRLF_SIZE
                             ):
-                                header_stop = header_start + expected_header_size
-                                payload_stop = header_start + expected_total_size
-                                header = self._data_received[header_start:header_stop]
-                                if header[-4:] != STOP_HEADER:
-                                    raise ProtocolError(next_byte, header)
+                                if (
+                                    self._data_received[
+                                        end + expected_header_size - 2 : end
+                                        + 2
+                                        + expected_header_size
+                                    ]
+                                    != STOP_HEADER
+                                ):
+                                    raise ProtocolError(
+                                        next_byte,
+                                        self._data_received[
+                                            end + 2 : end + 2 + expected_header_size
+                                        ],
+                                    )
                                 self._events_received.append(
                                     HMsgEvent(
                                         sid=sid,
                                         subject=subject.decode(),
                                         reply_to=reply_to.decode(),
                                         payload=self._data_received[
-                                            header_stop:payload_stop
+                                            end + 2 + expected_header_size : end
+                                            + 2
+                                            + expected_total_size
                                         ],
-                                        header=header[:-4],
+                                        header=self._data_received[
+                                            end + 2 : end - 2 + expected_header_size
+                                        ],
                                     )
                                 )
                                 self._data_received = self._data_received[
-                                    payload_stop + CRLF_SIZE + 1 :
+                                    end + expected_total_size + 7 :
                                 ]
                                 continue
                             else:
@@ -198,24 +210,20 @@ class Parser310:
                                     header=bytearray(),
                                 )
                                 state = State3102.AWAITING_HMSG_PAYLOAD
-                                self._data_received = self._data_received[header_start:]
+                                self._data_received = self._data_received[end + 2 :]
                                 yield None
                                 continue
-                        # case "P"
+                        # case "P": Fast path for PING and PONG
                         case 80:
-                            # Fast path for PING or PONG
                             if len(self._data_received) >= PING_OR_PONG_OP_LEN:
                                 if (
-                                    self._data_received[
-                                        PING_OR_PONG_OP_LEN - 2 : PING_OR_PONG_OP_LEN
-                                    ]
+                                    self._data_received[4:PING_OR_PONG_OP_LEN]
                                     != STOP_OP
                                 ):
                                     raise ProtocolError(next_byte, self._data_received)
-                                data = self._data_received[:PING_OR_PONG_LEN]
-                                if data == PING_OP:
+                                if self._data_received[:PING_OR_PONG_LEN] == PING_OP:
                                     self._events_received.append(PING_EVENT)
-                                elif data == PONG_OP:
+                                elif self._data_received[:PING_OR_PONG_LEN] == PONG_OP:
                                     self._events_received.append(PONG_EVENT)
                                 else:
                                     raise ProtocolError(next_byte, self._data_received)
@@ -227,36 +235,37 @@ class Parser310:
                             else:
                                 yield None
                                 continue
-                        # case "I"
+                        # case "I": Fast path for INFO
                         case 73:
                             try:
                                 end = self._data_received.index(CRLF)
                             except ValueError:
                                 yield None
                                 continue
-                            data = self._data_received[5:end]
-                            self._data_received = self._data_received[
-                                end + CRLF_SIZE + 1 :
-                            ]
                             try:
-                                self._events_received.append(parse_info(data))
+                                self._events_received.append(
+                                    parse_info(self._data_received[5:end])
+                                )
                             except Exception as e:
-                                raise ProtocolError(next_byte, data) from e
+                                raise ProtocolError(
+                                    next_byte, self._data_received[5:end]
+                                ) from e
+                            self._data_received = self._data_received[end + 3 :]
                             continue
-                        # case "+"
+                        # case "+": Fast path for +OK
                         case 43:
-                            try:
-                                end = self._data_received.index(CRLF)
-                            except ValueError:
+                            if len(self._data_received) >= 5:
+                                if self._data_received[:5] != OK_OP:
+                                    raise ProtocolError(
+                                        next_byte, self._data_received[:5]
+                                    )
+                                self._events_received.append(OK_EVENT)
+                                self._data_received = self._data_received[5:]
+                                continue
+                            else:
                                 yield None
                                 continue
-                            data = self._data_received[1:end]
-                            self._data_received = self._data_received[
-                                end + CRLF_SIZE + 1 :
-                            ]
-                            self._events_received.append(OK_EVENT)
-                            continue
-                        # case "-"
+                        # case "-": Fast path for -ERR
                         case 45:
                             try:
                                 end = self._data_received.index(CRLF)
@@ -270,6 +279,7 @@ class Parser310:
                         # Anything else is an error
                         case _:
                             raise ProtocolError(next_byte, self._data_received)
+                # We're waiting for some HMSG header and payload
                 case State3102.AWAITING_HMSG_PAYLOAD:
                     assert partial_msg is not None, "pending_msg is None"
                     if len(self._data_received) >= expected_total_size + CRLF_SIZE:
@@ -285,10 +295,9 @@ class Parser310:
                         partial_msg.header = self._data_received[
                             : expected_header_size - 4
                         ]
-                        payload = self._data_received[
+                        partial_msg.payload = self._data_received[
                             expected_header_size:expected_total_size
                         ]
-                        partial_msg.payload = payload
                         self._data_received = self._data_received[
                             expected_total_size + CRLF_SIZE + 1 :
                         ]
@@ -298,6 +307,7 @@ class Parser310:
                     else:
                         yield None
                         continue
+                # We're waiting for some MSG payload
                 case State3102.AWAITING_MSG_PAYLOAD:
                     assert partial_msg is not None, "pending_msg is None"
                     if len(self._data_received) >= expected_total_size + CRLF_SIZE:
