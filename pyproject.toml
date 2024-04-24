@@ -20,6 +20,7 @@ dev-dependencies = [
     "pyright>=1.1.359",
     "coverage>=7.4.4",
     'tomli; python_full_version<="3.11.0a6"',
+    'exceptiongroup; python_full_version<="3.11.0a6"',
 ]
 
 [tool.hatch.metadata]

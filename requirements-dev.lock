@@ -9,6 +9,8 @@
 
 -e file:.
 coverage==7.4.4
+exceptiongroup==1.2.1 ; python_full_version <= "3.11.0a6"
+    # via pytest
 iniconfig==2.0.0
     # via pytest
 nodeenv==1.8.0
@@ -19,5 +21,7 @@ pluggy==1.5.0
     # via pytest
 pyright==1.1.359
 pytest==8.1.1
+tomli==2.0.1 ; python_full_version <= "3.11.0a6"
+    # via pytest
 setuptools==69.5.1
     # via nodeenv
