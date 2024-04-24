@@ -50,12 +50,27 @@ jobs:
       - name: Run benchmarks
         run: rye run bench
 
+  test_and_coverage:
+    name: Tests 3.10 with coverage (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the latest version of rye
+        uses: eifinger/setup-rye@v2
+        with:
+          enable-cache: true
+          cache-prefix: 'test-3.10'
+
+      - name: Run pytest
+        run: rye run ci-test
+
   test:
     name: Tests (pytest)
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.8", "3.9", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
 
@@ -70,7 +85,6 @@ jobs:
       - name: Override python version required by project
         run: |
           echo "${{ matrix.python-version }}" > .python-version
-          sed -i -e 's/pythonVersion = "3.8"/pythonVersion = "${{ matrix.python-version }}"/g' pyproject.toml
 
       - name: Run pytest
         run: rye run ci-test
@@ -80,7 +94,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
 
@@ -95,7 +109,7 @@ jobs:
       - name: Override python version required by project
         run: |
           echo "${{ matrix.python-version }}" > .python-version
-          sed -i -e 's/pythonVersion = "3.8"/pythonVersion = "${{ matrix.python-version }}"/g' pyproject.toml
+          sed -i -e 's/pythonVersion = "3.10"/pythonVersion = "${{ matrix.python-version }}"/g' pyproject.toml
 
       - name: Run validation
         run: rye run ci-typecheck
