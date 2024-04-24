@@ -9,6 +9,7 @@ from benchmarks.stats_logger import StatsLogger
 
 
 class Scenario(str, Enum):
+    msg_ok_ping_msg_pong_msg_ok = "msg_ok_ping_msg_pong_msg_ok"
     msg_ping_pong_msg = "msg_ping_pong_msg"
     ping_pong = "ping_pong"
     msg_hmsg = "msg_hmsg"
@@ -18,10 +19,10 @@ def main():
     # Define command line arguments
     parser = ArgumentParser()
     parser.add_argument(
-        "--messages", "-n", type=int, default=50_000, help="Number of messages"
+        "--messages", "-n", type=int, default=10_000, help="Number of messages"
     )
     parser.add_argument(
-        "--repeat", "-r", type=int, default=1, help="Number of repetitions"
+        "--repeat", "-r", type=int, default=10, help="Number of repetitions"
     )
     parser.add_argument(
         "--scenario", "-s", type=str, default="ping_pong", help="Benchmark scenario"
@@ -47,14 +48,17 @@ def main():
         print(f"ERROR: Invalid scenario: {args.scenario}", file=sys.stderr)
         print(f"Allowed scenarios: {[s.value for s in Scenario]}", file=sys.stderr)
         sys.exit(1)
-    if scenario == Scenario.msg_ping_pong_msg:
-        opts = {"message_size": 1024}
+    if scenario == Scenario.msg_ok_ping_msg_pong_msg_ok:
+        opts = {"message_size": 1024, "subject_size": 64}
+        data = data_factory.msg_ping_pong_msg(args.messages, **opts)
+    elif scenario == Scenario.msg_ping_pong_msg:
+        opts = {"message_size": 1024, "subject_size": 64}
         data = data_factory.msg_ping_pong_msg(args.messages, **opts)
     elif scenario == Scenario.ping_pong:
         opts = {}
         data = data_factory.ping_pong(args.messages)
     elif scenario == Scenario.msg_hmsg:
-        opts = {"message_size": 1024, "header_size": 64}
+        opts = {"message_size": 1024, "subject_size": 64, "header_size": 64}
         data = data_factory.msg_hmsg(args.messages, **opts)
     else:
         print(f"Scenario not implemented: {scenario}", file=sys.stderr)
@@ -71,10 +75,21 @@ def main():
         repeat=args.repeat,
         **opts,
     )
-    for _ in range(args.repeat):
-        for op in data:
-            with report.observe():
+    print("#" * 60)
+    for idx in range(args.repeat):
+        parser = make_parser(backend)
+        with report.iteration() as iteration:
+            for op in data:
+                timer = iteration.observe()
+                timer.reset()
                 parser.parse(op)
+                timer.end()
+        results = iteration.result()
+        print(
+            f"[{backend}] {scenario} - iteration {idx+1}/{args.repeat} - {results.p50} ns/op"
+        )
+    results = report.results()
+    print(f"[{backend}] {scenario} 🕑 {results.score} ns/op")
     # Dump the profile
     report.write_to_file()
 

@@ -1,4 +1,3 @@
-import itertools
 import json
 
 import pytest
@@ -16,17 +15,6 @@ from protocol.common import (
     Version,
 )
 from protocol.parser_re import ParserRE as ParserRe
-
-
-def fuzz_case(string: str, suffix: str | None = None) -> list[str]:
-    return list(
-        set(
-            map(
-                lambda parts: "".join(parts) + suffix if suffix else "".join(parts),
-                itertools.product(*zip(string.upper(), string.lower())),
-            )
-        )
-    )
 
 
 def make_server_info(
@@ -116,40 +104,34 @@ class TestParserBasic:
         else:
             return self.parser.events_received()
 
-    @pytest.mark.parametrize("data", fuzz_case("ping", "\r\n"))
-    def test_parse_ping(self, data: str):
-        events = self.parse_text(data)
+    def test_parse_ping(self):
+        events = self.parse_text("PING\r\n")
         assert events == [
             PING_EVENT,
         ]
 
-    @pytest.mark.parametrize("data", fuzz_case("pong", "\r\n"))
-    def test_parse_pong(self, data: str):
-        events = self.parse_text(data)
+    def test_parse_pong(self):
+        events = self.parse_text("PONG\r\n")
         assert events == [
             PONG_EVENT,
         ]
 
-    @pytest.mark.parametrize("data", fuzz_case("+ok", "\r\n"))
-    def test_parse_ok(self, data: str):
-        events = self.parse_text(data)
+    def test_parse_ok(self):
+        events = self.parse_text("+OK\r\n")
         assert events == [
             OK_EVENT,
         ]
 
-    @pytest.mark.parametrize(
-        "data", fuzz_case("-err", " this is the error message\r\n")
-    )
-    def test_parse_err(self, data: str):
+    def test_parse_err(self):
         if isinstance(self.parser, ParserRe):
             pytest.skip("ParserRe does not parse errors yet")
-        events = self.parse_text(data)
+        events = self.parse_text("-err this is the error message\r\n")
         assert events == [
             ErrorEvent(message="this is the error message"),
         ]
 
     def test_parse_msg_with_empty_payload(self):
-        events = self.parse_text("msg the.subject 1234 0\r\n\r\n")
+        events = self.parse_text("MSG the.subject 1234 0\r\n\r\n")
         assert events == [
             MsgEvent(
                 sid=1234,
@@ -160,7 +142,7 @@ class TestParserBasic:
         ]
 
     def test_parse_msg_with_reply_and_empty_payload(self):
-        events = self.parse_text("msg the.subject 1234 the.reply.subject 0\r\n\r\n")
+        events = self.parse_text("MSG the.subject 1234 the.reply.subject 0\r\n\r\n")
         assert events == [
             MsgEvent(
                 sid=1234,
@@ -170,11 +152,8 @@ class TestParserBasic:
             ),
         ]
 
-    @pytest.mark.parametrize(
-        "data", fuzz_case("msg", " the.subject 1234 12\r\nhello world!\r\n")
-    )
-    def test_parse_msg(self, data: str):
-        events = self.parse_text(data)
+    def test_parse_msg(self):
+        events = self.parse_text("MSG the.subject 1234 12\r\nhello world!\r\n")
         assert events == [
             MsgEvent(
                 sid=1234,
@@ -184,12 +163,10 @@ class TestParserBasic:
             ),
         ]
 
-    @pytest.mark.parametrize(
-        "data",
-        fuzz_case("msg", " the.subject 1234 the.reply.subject 12\r\nhello world!\r\n"),
-    )
-    def test_parse_msg_with_reply(self, data: str):
-        events = self.parse_text(data)
+    def test_parse_msg_with_reply(self):
+        events = self.parse_text(
+            "MSG the.subject 1234 the.reply.subject 12\r\nhello world!\r\n"
+        )
         assert events == [
             MsgEvent(
                 sid=1234,
@@ -202,7 +179,7 @@ class TestParserBasic:
     def test_parse_hmsg_with_empty_header_and_empty_payload(self):
         if isinstance(self.parser, ParserRe):
             pytest.skip("ParserRe does not parse headers yet")
-        events = self.parse_text("hmsg the.subject 1234 4 4\r\n\r\n\r\n\r\n")
+        events = self.parse_text("HMSG the.subject 1234 4 4\r\n\r\n\r\n\r\n")
         assert events == [
             HMsgEvent(
                 sid=1234,
@@ -217,7 +194,7 @@ class TestParserBasic:
         if isinstance(self.parser, ParserRe):
             pytest.skip("ParserRe does not parse headers yet")
         events = self.parse_text(
-            "hmsg the.subject 1234 22 22\r\nNATS/1.0\r\nFoo: Bar\r\n\r\n\r\n"
+            "HMSG the.subject 1234 22 22\r\nNATS/1.0\r\nFoo: Bar\r\n\r\n\r\n"
         )
         assert events == [
             HMsgEvent(
@@ -229,14 +206,12 @@ class TestParserBasic:
             ),
         ]
 
-    @pytest.mark.parametrize(
-        "data",
-        ["hmsg the.subject 1234 18 30\r\nNATS/1.0\r\nA: B\r\n\r\nhello world!\r\n"],
-    )
-    def test_parse_hmsg(self, data: str):
+    def test_parse_hmsg(self):
         if isinstance(self.parser, ParserRe):
             pytest.skip("ParserRe does not parse headers yet")
-        events = self.parse_text(data)
+        events = self.parse_text(
+            "HMSG the.subject 1234 18 30\r\nNATS/1.0\r\nA: B\r\n\r\nhello world!\r\n"
+        )
         assert events == [
             HMsgEvent(
                 sid=1234,
@@ -247,16 +222,12 @@ class TestParserBasic:
             ),
         ]
 
-    @pytest.mark.parametrize(
-        "data",
-        [
-            "hmsg the.subject 1234 the.reply.subject 18 30\r\nNATS/1.0\r\nA: B\r\n\r\nhello world!\r\n"
-        ],
-    )
-    def test_parse_hmsg_with_reply(self, data: str):
+    def test_parse_hmsg_with_reply(self):
         if isinstance(self.parser, ParserRe):
             pytest.skip("ParserRe does not parse headers yet")
-        events = self.parse_text(data)
+        events = self.parse_text(
+            "HMSG the.subject 1234 the.reply.subject 18 30\r\nNATS/1.0\r\nA: B\r\n\r\nhello world!\r\n"
+        )
         assert events == [
             HMsgEvent(
                 sid=1234,
@@ -299,26 +270,23 @@ class TestParserBasic:
             ),
         ]
 
-    @pytest.mark.parametrize("data", ["ping\r\npong\r\n"])
-    def test_parse_ping_pong(self, data: str):
-        events = self.parse_text(data)
+    def test_parse_ping_pong(self):
+        events = self.parse_text("PING\r\nPONG\r\n")
         assert events == [
             PING_EVENT,
             PONG_EVENT,
         ]
 
-    @pytest.mark.parametrize("data", ["ping\r\n+ok\r\n"])
-    def test_parse_ping_ok(self, data: str):
-        events = self.parse_text(data)
+    def test_parse_ping_ok(self):
+        events = self.parse_text("PING\r\n+OK\r\n")
         assert events == [PING_EVENT, OK_EVENT]
 
-    @pytest.mark.parametrize(
-        "data", ["-err the error message\r\n-err the other error message\r\n"]
-    )
-    def test_parse_err_err(self, data: str):
+    def test_parse_err_err(self):
         if isinstance(self.parser, ParserRe):
             pytest.skip("ParserRe does not parse errors yet")
-        events = self.parse_text(data)
+        events = self.parse_text(
+            "-ERR the error message\r\n-ERR the other error message\r\n"
+        )
         assert events == [
             ErrorEvent(message="the error message"),
             ErrorEvent(message="the other error message"),
@@ -328,24 +296,24 @@ class TestParserBasic:
         "chunks",
         [
             [
-                b"msg the.subject 1234 12\r\n",
+                b"MSG the.subject 1234 12\r\n",
                 b"hello world!\r\n",
             ],
             [
-                b"msg the.subject 1234 12\r\nhello",
+                b"MSG the.subject 1234 12\r\nhello",
                 b" world!\r\n",
             ],
             [
-                b"msg the.subject 1234 12\r\nhello",
+                b"MSG the.subject 1234 12\r\nhello",
                 b" world!",
                 b"\r\n",
             ],
             [
-                b"msg the.subject",
+                b"MSG the.subject",
                 b" 1234 12\r\nhello world!\r\n",
             ],
             [
-                b"msg the.subject",
+                b"MSG the.subject",
                 b" 1234 12\r\nhello world",
                 b"!\r\n",
             ],
@@ -375,24 +343,24 @@ class TestParserBasic:
         "chunks",
         [
             [
-                b"msg the.subject 1234 the.reply.subject 12\r\n",
+                b"MSG the.subject 1234 the.reply.subject 12\r\n",
                 b"hello world!\r\n",
             ],
             [
-                b"msg the.subject 1234 the.reply.subject 12\r\nhello",
+                b"MSG the.subject 1234 the.reply.subject 12\r\nhello",
                 b" world!\r\n",
             ],
             [
-                b"msg the.subject 1234 the.reply.subject 12\r\nhello",
+                b"MSG the.subject 1234 the.reply.subject 12\r\nhello",
                 b" world!",
                 b"\r\n",
             ],
             [
-                b"msg the.subject",
+                b"MSG the.subject",
                 b" 1234 the.reply.subject 12\r\nhello world!\r\n",
             ],
             [
-                b"msg the.subject 1234 the.reply.",
+                b"MSG the.subject 1234 the.reply.",
                 b"subject 12\r\nhello world",
                 b"!\r\n",
             ],

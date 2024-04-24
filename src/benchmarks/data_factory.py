@@ -157,3 +157,21 @@ def msg_hmsg(
         msg(sid, subject_size, reply_subject_size, message_size),
         hmsg(sid, subject_size, reply_subject_size, message_size, header_size),
     ] * n
+
+
+def msg_ok_ping_msg_pong_msg_ok(
+    n: int,
+    sid: int = 1,
+    subject_size: int = 16,
+    reply_subject_size: int = 0,
+    message_size: int = 0,
+) -> list[bytes]:
+    return [
+        msg(sid, subject_size, reply_subject_size, message_size),
+        ok(),
+        ping(),
+        msg(sid, subject_size, reply_subject_size, message_size),
+        pong(),
+        msg(sid, subject_size, reply_subject_size, message_size),
+        ok(),
+    ] * n

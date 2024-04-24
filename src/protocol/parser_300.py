@@ -68,7 +68,7 @@ class Parser300:
             next_byte = self._data_received[0]
 
             if state == State3102.AWAITING_CONTROL_LINE:
-                if next_byte in [77, 109]:  # "m" | "M"
+                if next_byte == 77:  # "M"
                     try:
                         end = self._data_received.index(CRLF)
                     except ValueError:
@@ -120,7 +120,7 @@ class Parser300:
                         ]
                         yield None
                         continue
-                elif next_byte in [72, 104]:  # "H" | "h"
+                elif next_byte == 72:  # "H"
                     # Fast path for HMSG
                     try:
                         end = self._data_received.index(CRLF)
@@ -187,7 +187,7 @@ class Parser300:
                         self._data_received = self._data_received[header_start:]
                         yield None
                         continue
-                elif next_byte in [80, 112]:  # "P" | "p"
+                elif next_byte == 80:  # "P"
                     # Fast path for PING or PONG
                     if len(self._data_received) >= PING_OR_PONG_OP_LEN:
                         data = self._data_received[:PING_OR_PONG_LEN].upper()
@@ -203,7 +203,7 @@ class Parser300:
                     else:
                         yield None
                         continue
-                elif next_byte in [73, 105]:  # "I" | "i"
+                elif next_byte == 73:  # "I"
                     if CRLF in self._data_received:
                         end = self._data_received.index(CRLF)
                         data = self._data_received[5:end]

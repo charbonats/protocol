@@ -69,6 +69,7 @@ bench = { chain = [
     "__bench_ping_pong",
     "__bench_msg_hmsg",
     "__bench_msg_ping_pong_msg",
+    "__bench_msg_ok_ping_msg_pong_msg_ok",
 ] }
 # Clear cache
 clear = { chain = ["__clear_pycache", "__clear_bench", "__clear_dist"] }
@@ -94,6 +95,11 @@ __bench_msg_ping_pong_msg = { chain = [
     "__bench_msg_ping_pong_msg_310",
     "__bench_msg_ping_pong_msg_re",
 ] }
+__bench_msg_ok_ping_msg_pong_msg_ok = { chain = [
+    "__bench_msg_ok_ping_msg_pong_msg_ok_300",
+    "__bench_msg_ok_ping_msg_pong_msg_ok_310",
+    "__bench_msg_ok_ping_msg_pong_msg_ok_re",
+] }
 __bench_ping_pong_300 = "python -O -m benchmarks -s ping_pong -o bench -p 300"
 __bench_ping_pong_310 = "python -O -m benchmarks -s ping_pong -o bench -p 310"
 __bench_ping_pong_re = "python -O -m benchmarks -s ping_pong -o bench -p re"
@@ -103,6 +109,9 @@ __bench_msg_hmsg_re = "python -O -m benchmarks -s msg_hmsg -o bench -p re"
 __bench_msg_ping_pong_msg_300 = "python -O -m benchmarks -s msg_ping_pong_msg -o bench -p 300"
 __bench_msg_ping_pong_msg_310 = "python -O -m benchmarks -s msg_ping_pong_msg -o bench -p 310"
 __bench_msg_ping_pong_msg_re = "python -O -m benchmarks -s msg_ping_pong_msg -o bench -p re"
+__bench_msg_ok_ping_msg_pong_msg_ok_300 = "python -O -m benchmarks -s msg_ok_ping_msg_pong_msg_ok -o bench -p 300"
+__bench_msg_ok_ping_msg_pong_msg_ok_310 = "python -O -m benchmarks -s msg_ok_ping_msg_pong_msg_ok -o bench -p 310"
+__bench_msg_ok_ping_msg_pong_msg_ok_re = "python -O -m benchmarks -s msg_ok_ping_msg_pong_msg_ok -o bench -p re"
 
 [tool.coverage.run]
 source = ["src/protocol"]

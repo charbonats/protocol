@@ -34,31 +34,31 @@ from .common import (
 
 MSG_RE = re.compile(
     b"\\AMSG\\s+([^\\s]+)\\s+([^\\s]+)\\s+(([^\\s]+)[^\\S\r\n]+)?(\\d+)\r\n",
-    re.IGNORECASE,
+    # re.IGNORECASE,
 )
 HMSG_RE = re.compile(
     b"\\AHMSG\\s+([^\\s]+)\\s+([^\\s]+)\\s+(([^\\s]+)[^\\S\r\n]+)?([\\d]+)\\s+(\\d+)\r\n",
-    re.IGNORECASE,
+    # re.IGNORECASE,
 )
 OK_RE = re.compile(
     b"\\A\\+OK\\s*\r\n",
-    re.IGNORECASE,
+    # re.IGNORECASE,
 )
 ERR_RE = re.compile(
     b"\\A-ERR\\s+('.+')?\r\n",
-    re.IGNORECASE,
+    # re.IGNORECASE,
 )
 PING_RE = re.compile(
     b"\\APING\\s*\r\n",
-    re.IGNORECASE,
+    # re.IGNORECASE,
 )
 PONG_RE = re.compile(
     b"\\APONG\\s*\r\n",
-    re.IGNORECASE,
+    # re.IGNORECASE,
 )
 INFO_RE = re.compile(
     b"\\AINFO\\s+([^\r\n]+)\r\n",
-    re.IGNORECASE,
+    # re.IGNORECASE,
 )
 
 INFO_OP = b"INFO"
