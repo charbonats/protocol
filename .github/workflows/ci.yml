@@ -16,9 +16,6 @@ jobs:
 
       - name: Install the latest version of rye
         uses: eifinger/setup-rye@v2
-        with:
-          enable-cache: true
-          cache-prefix: 'ci'
 
       - name: Run linting
         run: rye run formatcheck
@@ -31,9 +28,6 @@ jobs:
 
       - name: Install the latest version of rye
         uses: eifinger/setup-rye@v2
-        with:
-          enable-cache: true
-          cache-prefix: 'ci'
 
       - name: Run linting
         run: rye run lint
@@ -48,7 +42,7 @@ jobs:
         uses: eifinger/setup-rye@v2
         with:
           enable-cache: true
-          cache-prefix: 'ci'
+          cache-prefix: 'bench'
 
       - name: Install project
         run: rye run bootstrap
@@ -71,7 +65,7 @@ jobs:
         uses: eifinger/setup-rye@v2
         with:
           enable-cache: true
-          cache-prefix: 'ci-${{ matrix.python-version }}'
+          cache-prefix: 'test-${{ matrix.python-version }}'
 
       - name: Override python version required by project
         run: |
@@ -96,7 +90,7 @@ jobs:
         uses: eifinger/setup-rye@v2
         with:
           enable-cache: true
-          cache-prefix: 'ci-${{ matrix.python-version }}'
+          cache-prefix: 'typecheck-${{ matrix.python-version }}'
 
       - name: Override python version required by project
         run: |
