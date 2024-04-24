@@ -173,8 +173,6 @@ class TestParserBasic:
         ],
     )
     def test_parse_err(self, data: list[bytes]):
-        # if isinstance(self.parser, ParserRe):
-        # pytest.skip("ParserRe does not parse errors yet")
         for chunk in data:
             self.parser.parse(chunk)
         assert self.parser.events_received() == [
@@ -253,7 +251,46 @@ class TestParserBasic:
         ]
 
     @pytest.mark.parametrize(
-        "data", [[b"MSG the.subject 1234 the.reply.subject 12\r\nhello world!\r\n"]]
+        "data",
+        [
+            [b"MSG the.subject 1234 the.reply.subject 12\r\nhello world!\r\n"],
+            [b"MSG", b" the.subject 1234 the.reply.subject 12\r\nhello world!\r\n"],
+            [
+                b"MSG",
+                b" the.",
+                b"subject 1234 the.reply.subject 12\r\nhello world!\r\n",
+            ],
+            [
+                b"MSG",
+                b" the.",
+                b"subject ",
+                b"1234 the.reply.subject 12\r\nhello world!\r\n",
+            ],
+            [
+                b"MSG",
+                b" the.",
+                b"subject ",
+                b"1234",
+                b" the.reply.subject 12\r\nhello world!\r\n",
+            ],
+            [
+                b"MSG",
+                b" the.",
+                b"subject ",
+                b"1234",
+                b" the.reply.subject ",
+                b"12\r\nhello world!\r\n",
+            ],
+            [
+                b"M",
+                b"SG",
+                b" the.",
+                b"subject ",
+                b"1234",
+                b" the.reply.subject ",
+                b"12\r\nhello world!\r\n",
+            ],
+        ],
     )
     def test_parse_msg_with_reply(self, data: list[bytes]):
         for chunk in data:
@@ -267,7 +304,37 @@ class TestParserBasic:
             ),
         ]
 
-    @pytest.mark.parametrize("data", [[b"HMSG the.subject 1234 4 4\r\n\r\n\r\n\r\n"]])
+    @pytest.mark.parametrize(
+        "data",
+        [
+            [b"HMSG the.subject 1234 4 4\r\n\r\n\r\n\r\n"],
+            [b"HMSG the.subject 1234 4 4\r\n", b"\r\n\r\n\r\n"],
+            [b"HMSG the.subject 1234 4 4\r\n\r\n", b"\r\n", b"\r\n"],
+            [b"HMSG the.subject 1234 4 4\r\n\r\n", b"\r", b"\n", b"\r\n"],
+            [b"HMSG the.subject 1234 4", b" 4\r\n\r\n", b"\r\n", b"\r\n"],
+            [b"HMSG the.subject 1234 ", b"4", b" 4\r\n\r\n", b"\r\n", b"\r\n"],
+            [b"HMSG the.subject", b" 1234 ", b"4", b" 4\r\n\r\n", b"\r\n", b"\r\n"],
+            [
+                b"HMSG",
+                b" the.subject",
+                b" 1234 ",
+                b"4",
+                b" 4\r\n\r\n",
+                b"\r\n",
+                b"\r\n",
+            ],
+            [
+                b"H",
+                b"MSG",
+                b" the.subject",
+                b" 1234 ",
+                b"4",
+                b" 4\r\n\r\n",
+                b"\r\n",
+                b"\r\n",
+            ],
+        ],
+    )
     def test_parse_hmsg_with_empty_header_and_empty_payload(self, data: list[bytes]):
         if isinstance(self.parser, ParserRe):
             pytest.skip("ParserRe does not parse headers yet")
@@ -284,11 +351,48 @@ class TestParserBasic:
         ]
 
     @pytest.mark.parametrize(
-        "data", [[b"HMSG the.subject 1234 22 22\r\nNATS/1.0\r\nFoo: Bar\r\n\r\n\r\n"]]
+        "data",
+        [
+            [b"HMSG the.subject 1234 22 22\r\nNATS/1.0\r\nFoo: Bar\r\n\r\n\r\n"],
+            [b"HMSG the.subject 1234 22 22\r\nNATS/1.0\r\nFoo: Bar\r\n\r\n", b"\r\n"],
+            [b"HMSG the.subject 1234 22 22\r\nNATS/1.0\r\nFoo: Bar\r\n", b"\r\n\r\n"],
+            [
+                b"HMSG the.subject 1234 22 22\r\nNATS/1.0\r\nFoo: Bar\r\n",
+                b"\r",
+                b"\n",
+                b"\r",
+                b"\n",
+            ],
+            [
+                b"HMSG the.subject 1234 22",
+                b" 22\r\nNATS/1.0\r\nFoo: Bar\r\n\r\n",
+                b"\r\n",
+            ],
+            [
+                b"HMSG the.subject 1234",
+                b" 22 22\r\nNATS/1.0\r\nFoo: Bar\r\n\r\n",
+                b"\r\n",
+            ],
+            [
+                b"HMSG the.subject",
+                b" 1234 22 22\r\nNATS/1.0\r\nFoo: Bar\r\n\r\n",
+                b"\r\n",
+            ],
+            [
+                b"HMSG",
+                b" the.subject 1234 22 22\r\nNATS/1.0\r\nFoo: Bar\r\n\r\n",
+                b"\r\n",
+            ],
+            [
+                b"H",
+                b"MSG",
+                b" the.subject ",
+                b"1234 22 22\r\nNATS/1.0\r\nFoo: Bar\r\n\r\n",
+                b"\r\n",
+            ],
+        ],
     )
     def test_parse_hmsg_with_header_and_empty_payload(self, data: list[bytes]):
-        if isinstance(self.parser, ParserRe):
-            pytest.skip("ParserRe does not parse headers yet")
         for chunk in data:
             self.parser.parse(chunk)
         assert self.parser.events_received() == [
@@ -303,11 +407,51 @@ class TestParserBasic:
 
     @pytest.mark.parametrize(
         "data",
-        [[b"HMSG the.subject 1234 18 30\r\nNATS/1.0\r\nA: B\r\n\r\nhello world!\r\n"]],
+        [
+            [
+                b"HMSG the.subject 1234 18 30\r\nNATS/1.0\r\nA: B\r\n\r\nhello world!\r\n",
+            ],
+            [
+                b"HMSG the.subject 1234 18 30\r\nNATS/1.0\r\nA: B\r\n\r\n",
+                b"hello world!\r\n",
+            ],
+            [
+                b"HMSG the.subject 1234 18 30\r\nNATS/1.0\r\nA: B\r\n",
+                b"\r\nhello world!\r\n",
+            ],
+            [
+                b"HMSG the.subject 1234 18 30\r\nNATS/1.0\r\nA: B\r",
+                b"\n",
+                b"\r",
+                b"\nhello world!\r\n",
+            ],
+            [
+                b"HMSG the.subject 1234 18",
+                b" 30\r\nNATS/1.0\r\nA: B\r\n\r\n",
+                b"hello world!\r\n",
+            ],
+            [
+                b"HMSG the.subject 1234",
+                b" 18 30\r\nNATS/1.0\r\nA: B\r\n\r\n",
+                b"hello world!\r\n",
+            ],
+            [
+                b"HMSG the.subject",
+                b" 1234 1",
+                b"8 30\r\nNATS/1.0\r\nA: B\r\n\r\n",
+                b"hello world!\r\n",
+            ],
+            [
+                b"H",
+                b"MSG",
+                b" the.subject 1",
+                b"234 18 3",
+                b"0\r\nNATS/1.0\r\nA: B\r\n\r\n",
+                b"hello world!\r\n",
+            ],
+        ],
     )
     def test_parse_hmsg(self, data: list[bytes]):
-        if isinstance(self.parser, ParserRe):
-            pytest.skip("ParserRe does not parse headers yet")
         for chunk in data:
             self.parser.parse(chunk)
         assert self.parser.events_received() == [
@@ -325,13 +469,44 @@ class TestParserBasic:
         [
             [
                 b"HMSG the.subject 1234 the.reply.subject 18 30\r\nNATS/1.0\r\nA: B\r\n\r\nhello world!\r\n"
-            ]
+            ],
+            [
+                b"HMSG the.subject 1234 the.reply.subject 18 30\r\nNATS/1.0\r\nA: B\r\n\r\n",
+                b"hello world!\r\n",
+            ],
+            [
+                b"HMSG the.subject 1234 the.reply.subject 18 30\r\nNATS/1.0\r\nA: B\r\n",
+                b"\r\nhello world!\r\n",
+            ],
+            [
+                b"HMSG the.subject 1234 the.reply.subject 18 30\r\nNATS/1.0\r\nA: B\r",
+                b"\n",
+                b"\r",
+                b"\nhello world!\r\n",
+            ],
+            [
+                b"HMSG the.subject 1234 the.reply.subject 1",
+                b"8",
+                b" 3",
+                b"0\r\nNATS/1.0\r\nA: B\r\n\r\n",
+                b"hello world!\r\n",
+            ],
+            [
+                b"HMSG the.subject 1234 the.reply.subject",
+                b" 18 30\r\nNATS/1.0\r\nA: B\r\n\r\n",
+                b"hello world!\r\n",
+            ],
+            [
+                b"H",
+                b"M",
+                b"SG the.subject",
+                b" 1234 the.reply.s",
+                b"ubject 18 30\r\nNATS/1.0\r\nA: B\r\n\r\n",
+                b"hello world!\r\n",
+            ],
         ],
     )
     def test_parse_hmsg_with_reply(self, data: list[bytes]):
-        if isinstance(self.parser, ParserRe):
-            pytest.skip("ParserRe does not parse headers yet")
-
         for chunk in data:
             self.parser.parse(chunk)
         assert self.parser.events_received() == [
@@ -384,7 +559,12 @@ class TestParserBasic:
     @pytest.mark.parametrize(
         "data",
         [
+            [b"PING\r\n", b"PONG\r\n"],
             [b"PING\r\nPONG\r\n"],
+            [b"PING\r\nPONG", b"\r\n"],
+            [b"PING", b"\r\nPONG", b"\r\n"],
+            [b"P", b"ING", b"\r\nPONG", b"\r\n"],
+            [b"P", b"ING", b"\r\nP", b"ONG", b"\r\n"],
         ],
     )
     def test_parse_ping_pong(self, data: list[bytes]):
@@ -398,7 +578,10 @@ class TestParserBasic:
     @pytest.mark.parametrize(
         "data",
         [
+            [b"PING\r\n", b"+OK\r\n"],
             [b"PING\r\n+OK\r\n"],
+            [b"PING\r\n+", b"OK\r\n"],
+            [b"PING\r", b"\n+", b"OK\r\n"],
         ],
     )
     def test_parse_ping_ok(self, data: list[bytes]):
@@ -409,12 +592,11 @@ class TestParserBasic:
     @pytest.mark.parametrize(
         "data",
         [
+            [b"-ERR 'the error message'\r\n", b"-ERR 'the other error message'\r\n"],
             [b"-ERR 'the error message'\r\n-ERR 'the other error message'\r\n"],
         ],
     )
     def test_parse_err_err(self, data: list[bytes]):
-        if isinstance(self.parser, ParserRe):
-            pytest.skip("ParserRe does not parse errors yet")
         for chunk in data:
             self.parser.parse(chunk)
         assert self.parser.events_received() == [
@@ -422,103 +604,9 @@ class TestParserBasic:
             ErrorEvent(message="the other error message"),
         ]
 
-    @pytest.mark.parametrize(
-        "chunks",
-        [
-            [
-                b"MSG the.subject 1234 12\r\n",
-                b"hello world!\r\n",
-            ],
-            [
-                b"MSG the.subject 1234 12\r\nhello",
-                b" world!\r\n",
-            ],
-            [
-                b"MSG the.subject 1234 12\r\nhello",
-                b" world!",
-                b"\r\n",
-            ],
-            [
-                b"MSG the.subject",
-                b" 1234 12\r\nhello world!\r\n",
-            ],
-            [
-                b"MSG the.subject",
-                b" 1234 12\r\nhello world",
-                b"!\r\n",
-            ],
-        ],
-        ids=[
-            "args_then_payload",
-            "args_then_payload_in_chunks",
-            "args_then_payload_in_chunks_then_cr",
-            "chunked_args_then_payload",
-            "chunked_args_then_chunked_payload",
-        ],
-    )
-    def test_parse_msg_in_several_chunks(self, chunks: list[bytes]):
-        for chunk in chunks:
-            self.parser.parse(chunk)
-        events = self.parser.events_received()
-        assert events == [
-            MsgEvent(
-                sid=1234,
-                subject="the.subject",
-                reply_to="",
-                payload=bytearray(b"hello world!"),
-            ),
-        ]
-
-    @pytest.mark.parametrize(
-        "chunks",
-        [
-            [
-                b"MSG the.subject 1234 the.reply.subject 12\r\n",
-                b"hello world!\r\n",
-            ],
-            [
-                b"MSG the.subject 1234 the.reply.subject 12\r\nhello",
-                b" world!\r\n",
-            ],
-            [
-                b"MSG the.subject 1234 the.reply.subject 12\r\nhello",
-                b" world!",
-                b"\r\n",
-            ],
-            [
-                b"MSG the.subject",
-                b" 1234 the.reply.subject 12\r\nhello world!\r\n",
-            ],
-            [
-                b"MSG the.subject 1234 the.reply.",
-                b"subject 12\r\nhello world",
-                b"!\r\n",
-            ],
-        ],
-        ids=[
-            "args_then_payload",
-            "args_then_payload_in_chunks",
-            "args_then_payload_in_chunks_then_cr",
-            "chunked_args_then_payload",
-            "chunked_args_then_chunked_payload",
-        ],
-    )
-    def test_parse_msg_with_reply_in_several_chunks(self, chunks: list[bytes]):
-        for chunk in chunks:
-            self.parser.parse(chunk)
-        events = self.parser.events_received()
-        assert events == [
-            MsgEvent(
-                sid=1234,
-                subject="the.subject",
-                reply_to="the.reply.subject",
-                payload=bytearray(b"hello world!"),
-            ),
-        ]
-
     def test_parse_invalid(self):
         if isinstance(self.parser, ParserRe):
-            pytest.skip("ParserRe does not parse errors yet")
+            pytest.skip("ParserRe does not raise common exceptions")
         with pytest.raises(ProtocolError) as exc:
             self.parser.parse(b"invalid\r\n")
         assert exc.match("unexpected byte:")

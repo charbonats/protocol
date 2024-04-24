@@ -131,23 +131,6 @@ class ParserRE:
                 yield None
                 continue
             if self._state == AWAITING_CONTROL_LINE:
-                msg = MSG_RE.match(self.buf)
-                if msg:
-                    try:
-                        subject, sid, _, reply, needed_bytes = msg.groups()
-                        self.msg_arg["subject"] = subject
-                        self.msg_arg["sid"] = int(sid)
-                        if reply:
-                            self.msg_arg["reply"] = reply
-                        else:
-                            self.msg_arg["reply"] = b""
-                        self.needed = int(needed_bytes)
-                        del self.buf[: msg.end()]
-                        self._state = AWAITING_MSG_PAYLOAD
-                        continue
-                    except Exception:
-                        raise ProtocolError("nats: malformed MSG")
-
                 msg = HMSG_RE.match(self.buf)
                 if msg:
                     try:
@@ -160,6 +143,23 @@ class ParserRE:
                             self.msg_arg["reply"] = b""
                         self.needed = int(needed_bytes)
                         self.header_needed = int(header_size)
+                        del self.buf[: msg.end()]
+                        self._state = AWAITING_MSG_PAYLOAD
+                        continue
+                    except Exception:
+                        raise ProtocolError("nats: malformed MSG")
+
+                msg = MSG_RE.match(self.buf)
+                if msg:
+                    try:
+                        subject, sid, _, reply, needed_bytes = msg.groups()
+                        self.msg_arg["subject"] = subject
+                        self.msg_arg["sid"] = int(sid)
+                        if reply:
+                            self.msg_arg["reply"] = reply
+                        else:
+                            self.msg_arg["reply"] = b""
+                        self.needed = int(needed_bytes)
                         del self.buf[: msg.end()]
                         self._state = AWAITING_MSG_PAYLOAD
                         continue
@@ -225,15 +225,9 @@ class ParserRE:
                     if self.header_needed > 0:
                         hbuf = bytes(self.buf[: self.header_needed])
                         payload = bytes(self.buf[self.header_needed : self.needed])
-                        hdr = hbuf
+                        hdr = hbuf[:-4]
                         del self.buf[: self.needed + CRLF_SIZE]
                         self.header_needed = 0
-                    else:
-                        payload = bytes(self.buf[: self.needed])
-                        del self.buf[: self.needed + CRLF_SIZE]
-
-                    self._state = AWAITING_CONTROL_LINE
-                    if self.header_needed:
                         self._events.append(
                             HMsgEvent(
                                 sid,
@@ -244,6 +238,8 @@ class ParserRE:
                             )
                         )
                     else:
+                        payload = bytes(self.buf[: self.needed])
+                        del self.buf[: self.needed + CRLF_SIZE]
                         self._events.append(
                             MsgEvent(
                                 sid,
@@ -252,6 +248,8 @@ class ParserRE:
                                 bytearray(payload),
                             )
                         )
+                    self._state = AWAITING_CONTROL_LINE
+
                 else:
                     # Wait until we have enough bytes in buffer.
                     yield None

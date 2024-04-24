@@ -273,9 +273,7 @@ class Parser300:
                         raise ProtocolError(
                             next_byte, self._data_received[:expected_header_size]
                         )
-                    partial_msg.header = self._data_received[
-                        expected_header_size - 4 : expected_header_size
-                    ]
+                    partial_msg.header = self._data_received[: expected_header_size - 4]
                     partial_msg.payload = self._data_received[
                         expected_header_size:expected_total_size
                     ]
