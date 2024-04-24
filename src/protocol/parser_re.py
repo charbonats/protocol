@@ -33,32 +33,32 @@ from .common import (
 )
 
 MSG_RE = re.compile(
-    b"\\AMSG\\s+([^\\s]+)\\s+([^\\s]+)\\s+(([^\\s]+)[^\\S\r\n]+)?(\\d+)\r\n",
-    # re.IGNORECASE,
+    b"MSG\\s+([^\\s]+)\\s+([^\\s]+)\\s+(([^\\s]+)[^\\S\r\n]+)?(\\d+)\r\n",
+    re.ASCII,
 )
 HMSG_RE = re.compile(
-    b"\\AHMSG\\s+([^\\s]+)\\s+([^\\s]+)\\s+(([^\\s]+)[^\\S\r\n]+)?([\\d]+)\\s+(\\d+)\r\n",
-    # re.IGNORECASE,
+    b"HMSG\\s+([^\\s]+)\\s+([^\\s]+)\\s+(([^\\s]+)[^\\S\r\n]+)?([\\d]+)\\s+(\\d+)\r\n",
+    re.ASCII,
 )
 OK_RE = re.compile(
-    b"\\A\\+OK\\s*\r\n",
-    # re.IGNORECASE,
+    b"\\+OK\\s*\r\n",
+    re.ASCII,
 )
 ERR_RE = re.compile(
-    b"\\A-ERR\\s+('.+')?\r\n",
-    # re.IGNORECASE,
+    b"-ERR\\s+('.+')?\r\n",
+    re.ASCII,
 )
 PING_RE = re.compile(
-    b"\\APING\\s*\r\n",
-    # re.IGNORECASE,
+    b"PING\\s*\r\n",
+    re.ASCII,
 )
 PONG_RE = re.compile(
-    b"\\APONG\\s*\r\n",
-    # re.IGNORECASE,
+    b"PONG\\s*\r\n",
+    re.ASCII,
 )
 INFO_RE = re.compile(
-    b"\\AINFO\\s+([^\r\n]+)\r\n",
-    # re.IGNORECASE,
+    b"INFO\\s+([^\r\n]+)\r\n",
+    re.ASCII,
 )
 
 INFO_OP = b"INFO"
@@ -177,7 +177,7 @@ class ParserRE:
                 if err:
                     err_msg = err.groups()
                     emsg = err_msg[0].decode().lower()
-                    self._events.append(ErrorEvent(emsg))
+                    self._events.append(ErrorEvent(emsg[1:-1]))
                     del self.buf[: err.end()]
                     continue
 
@@ -201,6 +201,7 @@ class ParserRE:
                     continue
 
                 if len(self.buf) < MAX_CONTROL_LINE_SIZE and _CRLF_ in self.buf:
+                    raise Exception(self.buf)
                     # FIXME: By default server uses a max protocol
                     # line of 4096 bytes but it can be tuned in latest
                     # releases, in that case we won't reach here but

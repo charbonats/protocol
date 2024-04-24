@@ -251,7 +251,11 @@ class Parser300:
                         yield None
                         continue
                     msg = self._data_received[5:end].decode()
-                    self._events_received.append(ErrorEvent(msg))
+                    if msg[0] != "'":
+                        raise ProtocolError(next_byte, self._data_received)
+                    if msg[-1] != "'":
+                        raise ProtocolError(next_byte, self._data_received)
+                    self._events_received.append(ErrorEvent(msg[1:-1].lower()))
                     self._data_received = self._data_received[end + CRLF_SIZE :]
                     continue
                 else:

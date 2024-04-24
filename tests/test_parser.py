@@ -10,7 +10,6 @@ from protocol.common import (
     PING_EVENT,
     PONG_EVENT,
     ErrorEvent,
-    Event,
     HMsgEvent,
     InfoEvent,
     MsgEvent,
@@ -102,42 +101,103 @@ class TestParserBasic:
             pytest.skip("Parser 3.10 is not available in this Python version")
         self.parser = make_parser(backend)
 
-    def parse_text(self, data: str) -> list[Event]:
-        self.parser.parse(data.encode("ascii"))
-        if isinstance(self.parser, ParserRe):
-            return self.parser.events_received()
-        else:
-            return self.parser.events_received()
-
-    def test_parse_ping(self):
-        events = self.parse_text("PING\r\n")
-        assert events == [
+    @pytest.mark.parametrize(
+        "data",
+        [
+            [b"PING\r\n"],
+            [b"PING\r", b"\n"],
+            [b"PING", b"\r\n"],
+            [b"PING", b"\r", b"\n"],
+            [b"PIN", b"G\r\n"],
+            [b"P", b"ING\r\n"],
+            [b"P", b"I", b"N", b"G", b"\r", b"\n"],
+        ],
+    )
+    def test_parse_ping(self, data: list[bytes]):
+        for chunk in data:
+            self.parser.parse(chunk)
+        assert self.parser.events_received() == [
             PING_EVENT,
         ]
 
-    def test_parse_pong(self):
-        events = self.parse_text("PONG\r\n")
-        assert events == [
+    @pytest.mark.parametrize(
+        "data",
+        [
+            [b"PONG\r\n"],
+            [b"PONG\r", b"\n"],
+            [b"PONG", b"\r\n"],
+            [b"PONG", b"\r", b"\n"],
+            [b"PON", b"G\r\n"],
+            [b"P", b"ONG\r\n"],
+            [b"P", b"O", b"N", b"G", b"\r", b"\n"],
+        ],
+    )
+    def test_parse_pong(self, data: list[bytes]):
+        for chunk in data:
+            self.parser.parse(chunk)
+        assert self.parser.events_received() == [
             PONG_EVENT,
         ]
 
-    def test_parse_ok(self):
-        events = self.parse_text("+OK\r\n")
-        assert events == [
+    @pytest.mark.parametrize(
+        "data",
+        [
+            [b"+OK\r\n"],
+            [b"+OK\r", b"\n"],
+            [b"+OK", b"\r\n"],
+            [b"+OK", b"\r", b"\n"],
+            [b"+O", b"K\r\n"],
+            [b"+", b"OK\r\n"],
+            [b"+", b"O", b"K", b"\r", b"\n"],
+        ],
+    )
+    def test_parse_ok(self, data: list[bytes]):
+        for chunk in data:
+            self.parser.parse(chunk)
+        assert self.parser.events_received() == [
             OK_EVENT,
         ]
 
-    def test_parse_err(self):
-        if isinstance(self.parser, ParserRe):
-            pytest.skip("ParserRe does not parse errors yet")
-        events = self.parse_text("-err this is the error message\r\n")
-        assert events == [
+    @pytest.mark.parametrize(
+        "data",
+        [
+            [b"-ERR 'This is the error message'\r\n"],
+            [b"-ERR 'This is the error message'\r", b"\n"],
+            [b"-ERR 'This is the error message'", b"\r\n"],
+            [b"-ERR 'This is the error message'", b"\r", b"\n"],
+            [b"-ERR 'This is the error", b" message'\r\n"],
+            [b"-ERR 'This is the", b" error message'\r\n"],
+            [b"-ERR 'This is the", b" error message'", b"\r", b"\n"],
+            [b"-", b"ERR 'This is the error message'\r\n"],
+            [b"-ERR", b" 'This is the error message'\r\n"],
+        ],
+    )
+    def test_parse_err(self, data: list[bytes]):
+        # if isinstance(self.parser, ParserRe):
+        # pytest.skip("ParserRe does not parse errors yet")
+        for chunk in data:
+            self.parser.parse(chunk)
+        assert self.parser.events_received() == [
             ErrorEvent(message="this is the error message"),
         ]
 
-    def test_parse_msg_with_empty_payload(self):
-        events = self.parse_text("MSG the.subject 1234 0\r\n\r\n")
-        assert events == [
+    @pytest.mark.parametrize(
+        "data",
+        [
+            [b"MSG the.subject 1234 0\r\n\r\n"],
+            [b"MSG the.subject 1234 0", b"\r\n", b"\r\n"],
+            [b"MSG the.subject 1234 0\r", b"\n", b"\r\n"],
+            [b"MSG the.subject 1234 0", b"\r", b"\n", b"\r\n"],
+            [b"MSG the.subject 1234", b" 0\r\n\r\n"],
+            [b"MSG the.subject", b" 1234 0\r\n\r\n"],
+            [b"MSG ", b"the.subject", b" 1234 0\r\n\r\n"],
+            [b"M", b"SG ", b"the.subject", b" 1234 0\r\n\r\n"],
+        ],
+    )
+    def test_parse_msg_with_empty_payload(self, data: list[bytes]):
+        for chunk in data:
+            self.parser.parse(chunk)
+        assert self.parser.events_received() == [
             MsgEvent(
                 sid=1234,
                 subject="the.subject",
@@ -146,9 +206,31 @@ class TestParserBasic:
             ),
         ]
 
-    def test_parse_msg_with_reply_and_empty_payload(self):
-        events = self.parse_text("MSG the.subject 1234 the.reply.subject 0\r\n\r\n")
-        assert events == [
+    @pytest.mark.parametrize(
+        "data",
+        [
+            [b"MSG the.subject 1234 the.reply.subject 0\r\n\r\n"],
+            [b"MSG the.subject 1234 the.reply.subject 0", b"\r\n", b"\r\n"],
+            [b"MSG the.subject 1234 the.reply.subject 0\r", b"\n", b"\r\n"],
+            [b"MSG the.subject 1234 the.reply.subject 0", b"\r", b"\n", b"\r\n"],
+            [b"MSG the.subject 1234 the.reply.subject", b" 0\r\n\r\n"],
+            [b"MSG the.subject 1234 ", b"the.reply.subject", b" 0\r\n\r\n"],
+            [b"MSG the.subject", b" 1234 ", b"the.reply.subject", b" 0\r\n\r\n"],
+            [b"MSG", b" the.subject", b" 1234 ", b"the.reply.subject", b" 0\r\n\r\n"],
+            [
+                b"M",
+                b"SG",
+                b" the.subject",
+                b" 1234 ",
+                b"the.reply.subject",
+                b" 0\r\n\r\n",
+            ],
+        ],
+    )
+    def test_parse_msg_with_reply_and_empty_payload(self, data: list[bytes]):
+        for chunk in data:
+            self.parser.parse(chunk)
+        assert self.parser.events_received() == [
             MsgEvent(
                 sid=1234,
                 subject="the.subject",
@@ -157,9 +239,11 @@ class TestParserBasic:
             ),
         ]
 
-    def test_parse_msg(self):
-        events = self.parse_text("MSG the.subject 1234 12\r\nhello world!\r\n")
-        assert events == [
+    @pytest.mark.parametrize("data", [[b"MSG the.subject 1234 12\r\nhello world!\r\n"]])
+    def test_parse_msg(self, data: list[bytes]):
+        for chunk in data:
+            self.parser.parse(chunk)
+        assert self.parser.events_received() == [
             MsgEvent(
                 sid=1234,
                 subject="the.subject",
@@ -168,11 +252,13 @@ class TestParserBasic:
             ),
         ]
 
-    def test_parse_msg_with_reply(self):
-        events = self.parse_text(
-            "MSG the.subject 1234 the.reply.subject 12\r\nhello world!\r\n"
-        )
-        assert events == [
+    @pytest.mark.parametrize(
+        "data", [[b"MSG the.subject 1234 the.reply.subject 12\r\nhello world!\r\n"]]
+    )
+    def test_parse_msg_with_reply(self, data: list[bytes]):
+        for chunk in data:
+            self.parser.parse(chunk)
+        assert self.parser.events_received() == [
             MsgEvent(
                 sid=1234,
                 subject="the.subject",
@@ -181,11 +267,13 @@ class TestParserBasic:
             ),
         ]
 
-    def test_parse_hmsg_with_empty_header_and_empty_payload(self):
+    @pytest.mark.parametrize("data", [[b"HMSG the.subject 1234 4 4\r\n\r\n\r\n\r\n"]])
+    def test_parse_hmsg_with_empty_header_and_empty_payload(self, data: list[bytes]):
         if isinstance(self.parser, ParserRe):
             pytest.skip("ParserRe does not parse headers yet")
-        events = self.parse_text("HMSG the.subject 1234 4 4\r\n\r\n\r\n\r\n")
-        assert events == [
+        for chunk in data:
+            self.parser.parse(chunk)
+        assert self.parser.events_received() == [
             HMsgEvent(
                 sid=1234,
                 subject="the.subject",
@@ -195,13 +283,15 @@ class TestParserBasic:
             ),
         ]
 
-    def test_parse_hmsg_with_header_and_empty_payload(self):
+    @pytest.mark.parametrize(
+        "data", [[b"HMSG the.subject 1234 22 22\r\nNATS/1.0\r\nFoo: Bar\r\n\r\n\r\n"]]
+    )
+    def test_parse_hmsg_with_header_and_empty_payload(self, data: list[bytes]):
         if isinstance(self.parser, ParserRe):
             pytest.skip("ParserRe does not parse headers yet")
-        events = self.parse_text(
-            "HMSG the.subject 1234 22 22\r\nNATS/1.0\r\nFoo: Bar\r\n\r\n\r\n"
-        )
-        assert events == [
+        for chunk in data:
+            self.parser.parse(chunk)
+        assert self.parser.events_received() == [
             HMsgEvent(
                 sid=1234,
                 subject="the.subject",
@@ -211,13 +301,16 @@ class TestParserBasic:
             ),
         ]
 
-    def test_parse_hmsg(self):
+    @pytest.mark.parametrize(
+        "data",
+        [[b"HMSG the.subject 1234 18 30\r\nNATS/1.0\r\nA: B\r\n\r\nhello world!\r\n"]],
+    )
+    def test_parse_hmsg(self, data: list[bytes]):
         if isinstance(self.parser, ParserRe):
             pytest.skip("ParserRe does not parse headers yet")
-        events = self.parse_text(
-            "HMSG the.subject 1234 18 30\r\nNATS/1.0\r\nA: B\r\n\r\nhello world!\r\n"
-        )
-        assert events == [
+        for chunk in data:
+            self.parser.parse(chunk)
+        assert self.parser.events_received() == [
             HMsgEvent(
                 sid=1234,
                 subject="the.subject",
@@ -227,13 +320,21 @@ class TestParserBasic:
             ),
         ]
 
-    def test_parse_hmsg_with_reply(self):
+    @pytest.mark.parametrize(
+        "data",
+        [
+            [
+                b"HMSG the.subject 1234 the.reply.subject 18 30\r\nNATS/1.0\r\nA: B\r\n\r\nhello world!\r\n"
+            ]
+        ],
+    )
+    def test_parse_hmsg_with_reply(self, data: list[bytes]):
         if isinstance(self.parser, ParserRe):
             pytest.skip("ParserRe does not parse headers yet")
-        events = self.parse_text(
-            "HMSG the.subject 1234 the.reply.subject 18 30\r\nNATS/1.0\r\nA: B\r\n\r\nhello world!\r\n"
-        )
-        assert events == [
+
+        for chunk in data:
+            self.parser.parse(chunk)
+        assert self.parser.events_received() == [
             HMsgEvent(
                 sid=1234,
                 subject="the.subject",
@@ -243,9 +344,14 @@ class TestParserBasic:
             ),
         ]
 
-    def test_parse_info(self):
-        events = self.parse_text(make_server_info())
-        assert events == [
+    @pytest.mark.parametrize(
+        "data",
+        [[make_server_info().encode()]],
+    )
+    def test_parse_info(self, data: list[bytes]):
+        for chunk in data:
+            self.parser.parse(chunk)
+        assert self.parser.events_received() == [
             InfoEvent(
                 proto=1,
                 server_id="test",
@@ -275,24 +381,43 @@ class TestParserBasic:
             ),
         ]
 
-    def test_parse_ping_pong(self):
-        events = self.parse_text("PING\r\nPONG\r\n")
-        assert events == [
+    @pytest.mark.parametrize(
+        "data",
+        [
+            [b"PING\r\nPONG\r\n"],
+        ],
+    )
+    def test_parse_ping_pong(self, data: list[bytes]):
+        for chunk in data:
+            self.parser.parse(chunk)
+        assert self.parser.events_received() == [
             PING_EVENT,
             PONG_EVENT,
         ]
 
-    def test_parse_ping_ok(self):
-        events = self.parse_text("PING\r\n+OK\r\n")
-        assert events == [PING_EVENT, OK_EVENT]
+    @pytest.mark.parametrize(
+        "data",
+        [
+            [b"PING\r\n+OK\r\n"],
+        ],
+    )
+    def test_parse_ping_ok(self, data: list[bytes]):
+        for chunk in data:
+            self.parser.parse(chunk)
+        assert self.parser.events_received() == [PING_EVENT, OK_EVENT]
 
-    def test_parse_err_err(self):
+    @pytest.mark.parametrize(
+        "data",
+        [
+            [b"-ERR 'the error message'\r\n-ERR 'the other error message'\r\n"],
+        ],
+    )
+    def test_parse_err_err(self, data: list[bytes]):
         if isinstance(self.parser, ParserRe):
             pytest.skip("ParserRe does not parse errors yet")
-        events = self.parse_text(
-            "-ERR the error message\r\n-ERR the other error message\r\n"
-        )
-        assert events == [
+        for chunk in data:
+            self.parser.parse(chunk)
+        assert self.parser.events_received() == [
             ErrorEvent(message="the error message"),
             ErrorEvent(message="the other error message"),
         ]
@@ -395,5 +520,5 @@ class TestParserBasic:
         if isinstance(self.parser, ParserRe):
             pytest.skip("ParserRe does not parse errors yet")
         with pytest.raises(ProtocolError) as exc:
-            self.parse_text("invalid\r\n")
+            self.parser.parse(b"invalid\r\n")
         assert exc.match("unexpected byte:")
