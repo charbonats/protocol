@@ -50,6 +50,9 @@ jobs:
           enable-cache: true
           cache-prefix: 'ci'
 
+      - name: Install project
+        run: rye run bootstrap
+
       - name: Run benchmarks
         run: rye run bench
 
@@ -76,7 +79,7 @@ jobs:
           sed -i -e 's/pythonVersion = "3.8"/pythonVersion = "${{ matrix.python-version }}"/g' pyproject.toml
 
       - name: Run pytest
-        run: rye run test
+        run: rye run ci-test
 
   typecheck:
     name: Typecheck (pyright)
@@ -101,4 +104,4 @@ jobs:
           sed -i -e 's/pythonVersion = "3.8"/pythonVersion = "${{ matrix.python-version }}"/g' pyproject.toml
 
       - name: Run validation
-        run: rye run typecheck
+        run: rye run ci-typecheck
