@@ -16,7 +16,6 @@ from protocol.common import (
     ProtocolError,
     Version,
 )
-from protocol.parser_re import ParserRE as ParserRe
 
 
 def make_server_info(
@@ -336,8 +335,6 @@ class TestParserBasic:
         ],
     )
     def test_parse_hmsg_with_empty_header_and_empty_payload(self, data: list[bytes]):
-        if isinstance(self.parser, ParserRe):
-            pytest.skip("ParserRe does not parse headers yet")
         for chunk in data:
             self.parser.parse(chunk)
         assert self.parser.events_received() == [
@@ -605,8 +602,6 @@ class TestParserBasic:
         ]
 
     def test_parse_invalid(self):
-        if isinstance(self.parser, ParserRe):
-            pytest.skip("ParserRe does not raise common exceptions")
         with pytest.raises(ProtocolError) as exc:
             self.parser.parse(b"invalid\r\n")
-        assert exc.match("unexpected byte:")
+        assert exc.match("nats protocol error")

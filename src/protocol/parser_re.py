@@ -29,6 +29,7 @@ from .common import (
     Event,
     HMsgEvent,
     MsgEvent,
+    ProtocolError,
     parse_info,
 )
 
@@ -147,7 +148,7 @@ class ParserRE:
                         self._state = AWAITING_MSG_PAYLOAD
                         continue
                     except Exception:
-                        raise ProtocolError("nats: malformed MSG")
+                        raise ProtocolError()
 
                 msg = MSG_RE.match(self.buf)
                 if msg:
@@ -164,7 +165,7 @@ class ParserRE:
                         self._state = AWAITING_MSG_PAYLOAD
                         continue
                     except Exception:
-                        raise ProtocolError("nats: malformed MSG")
+                        raise ProtocolError()
 
                 ok = OK_RE.match(self.buf)
                 if ok:
@@ -201,13 +202,12 @@ class ParserRE:
                     continue
 
                 if len(self.buf) < MAX_CONTROL_LINE_SIZE and _CRLF_ in self.buf:
-                    raise Exception(self.buf)
                     # FIXME: By default server uses a max protocol
                     # line of 4096 bytes but it can be tuned in latest
                     # releases, in that case we won't reach here but
                     # client ping/pong interval would disconnect
                     # eventually.
-                    raise ProtocolError("nats: unknown protocol")
+                    raise ProtocolError()
                 else:
                     # If nothing matched at this point, then it must
                     # be a split buffer and need to gather more bytes.
@@ -254,11 +254,6 @@ class ParserRE:
                     # Wait until we have enough bytes in buffer.
                     yield None
                     continue
-
-
-class ProtocolError(Exception):
-    def __init__(self, msg: str) -> None:
-        super().__init__(msg)
 
 
 if TYPE_CHECKING:

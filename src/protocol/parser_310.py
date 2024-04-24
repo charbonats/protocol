@@ -17,7 +17,6 @@ from .common import (
     HMsgEvent,
     MsgEvent,
     ProtocolError,
-    State3102,
     parse_info,
 )
 
@@ -28,6 +27,10 @@ PONG_OP = bytearray(b"PONG")
 OK_OP = bytearray(b"+OK\r\n")
 PING_OR_PONG_LEN = len(PING_OP)
 PING_OR_PONG_OP_LEN = PING_OR_PONG_LEN + CRLF_SIZE
+
+AWAITING_CONTROL_LINE = 0
+AWAITING_HMSG_PAYLOAD = 1
+AWAITING_MSG_PAYLOAD = 2
 
 
 class Parser310:
@@ -59,7 +62,7 @@ class Parser310:
         expected_header_size = 0
         expected_total_size = 0
         partial_msg: MsgEvent | HMsgEvent | None = None
-        state = State3102.AWAITING_CONTROL_LINE
+        state = AWAITING_CONTROL_LINE
 
         while not self._closed:
             # If there is no data to parse, yield None.
@@ -71,7 +74,7 @@ class Parser310:
             next_byte = self._data_received[0]
 
             match state:
-                case State3102.AWAITING_CONTROL_LINE:
+                case 0:
                     match next_byte:
                         # case "M": Fast path for MSG
                         case 77:
@@ -90,14 +93,12 @@ class Parser310:
                                     reply_to = b""
                                     subject, raw_sid, raw_total_size = args
                                 case _:
-                                    raise ProtocolError(next_byte, self._data_received)
+                                    raise ProtocolError()
                             try:
                                 sid = int(raw_sid)
                                 expected_total_size = int(raw_total_size)
                             except Exception as e:
-                                raise ProtocolError(
-                                    next_byte, self._data_received
-                                ) from e
+                                raise ProtocolError() from e
                             if (
                                 len(self._data_received[end + 2 :])
                                 >= expected_total_size + CRLF_SIZE
@@ -123,7 +124,7 @@ class Parser310:
                                     reply_to=reply_to.decode(),
                                     payload=bytearray(),
                                 )
-                                state = State3102.AWAITING_MSG_PAYLOAD
+                                state = AWAITING_MSG_PAYLOAD
                                 self._data_received: bytearray = self._data_received[
                                     end + 2 :
                                 ]
@@ -155,15 +156,13 @@ class Parser310:
                                         raw_total_size,
                                     ) = args
                                 case _:
-                                    raise ProtocolError(next_byte, self._data_received)
+                                    raise ProtocolError()
                             try:
                                 expected_header_size = int(raw_header_size)
                                 expected_total_size = int(raw_total_size)
                                 sid = int(raw_sid)
                             except Exception as e:
-                                raise ProtocolError(
-                                    next_byte, self._data_received
-                                ) from e
+                                raise ProtocolError() from e
                             if (
                                 len(self._data_received[end + 2 :])
                                 >= expected_total_size + CRLF_SIZE
@@ -176,12 +175,7 @@ class Parser310:
                                     ]
                                     != STOP_HEADER
                                 ):
-                                    raise ProtocolError(
-                                        next_byte,
-                                        self._data_received[
-                                            end + 2 : end + 2 + expected_header_size
-                                        ],
-                                    )
+                                    raise ProtocolError()
                                 self._events_received.append(
                                     HMsgEvent(
                                         sid=sid,
@@ -209,7 +203,7 @@ class Parser310:
                                     payload=bytearray(),
                                     header=bytearray(),
                                 )
-                                state = State3102.AWAITING_HMSG_PAYLOAD
+                                state = AWAITING_HMSG_PAYLOAD
                                 self._data_received = self._data_received[end + 2 :]
                                 yield None
                                 continue
@@ -220,13 +214,13 @@ class Parser310:
                                     self._data_received[4:PING_OR_PONG_OP_LEN]
                                     != STOP_OP
                                 ):
-                                    raise ProtocolError(next_byte, self._data_received)
+                                    raise ProtocolError()
                                 if self._data_received[:PING_OR_PONG_LEN] == PING_OP:
                                     self._events_received.append(PING_EVENT)
                                 elif self._data_received[:PING_OR_PONG_LEN] == PONG_OP:
                                     self._events_received.append(PONG_EVENT)
                                 else:
-                                    raise ProtocolError(next_byte, self._data_received)
+                                    raise ProtocolError()
                                 self._data_received = self._data_received[
                                     PING_OR_PONG_OP_LEN:
                                 ]
@@ -247,18 +241,14 @@ class Parser310:
                                     parse_info(self._data_received[5:end])
                                 )
                             except Exception as e:
-                                raise ProtocolError(
-                                    next_byte, self._data_received[5:end]
-                                ) from e
+                                raise ProtocolError() from e
                             self._data_received = self._data_received[end + 3 :]
                             continue
                         # case "+": Fast path for +OK
                         case 43:
                             if len(self._data_received) >= 5:
                                 if self._data_received[:5] != OK_OP:
-                                    raise ProtocolError(
-                                        next_byte, self._data_received[:5]
-                                    )
+                                    raise ProtocolError()
                                 self._events_received.append(OK_EVENT)
                                 self._data_received = self._data_received[5:]
                                 continue
@@ -274,17 +264,17 @@ class Parser310:
                                 continue
                             msg = self._data_received[5:end].decode()
                             if msg[0] != "'":
-                                raise ProtocolError(next_byte, self._data_received)
+                                raise ProtocolError()
                             if msg[-1] != "'":
-                                raise ProtocolError(next_byte, self._data_received)
+                                raise ProtocolError()
                             self._events_received.append(ErrorEvent(msg[1:-1].lower()))
                             self._data_received = self._data_received[end + CRLF_SIZE :]
                             continue
                         # Anything else is an error
                         case _:
-                            raise ProtocolError(next_byte, self._data_received)
+                            raise ProtocolError()
                 # We're waiting for some HMSG header and payload
-                case State3102.AWAITING_HMSG_PAYLOAD:
+                case 1:
                     assert partial_msg is not None, "pending_msg is None"
                     if len(self._data_received) >= expected_total_size + CRLF_SIZE:
                         if (
@@ -293,9 +283,7 @@ class Parser310:
                             ]
                             != STOP_HEADER
                         ):
-                            raise ProtocolError(
-                                next_byte, self._data_received[:expected_header_size]
-                            )
+                            raise ProtocolError()
                         partial_msg.header = self._data_received[
                             : expected_header_size - 4
                         ]
@@ -306,13 +294,13 @@ class Parser310:
                             expected_total_size + CRLF_SIZE + 1 :
                         ]
                         self._events_received.append(partial_msg)
-                        state = State3102.AWAITING_CONTROL_LINE
+                        state = AWAITING_CONTROL_LINE
                         continue
                     else:
                         yield None
                         continue
                 # We're waiting for some MSG payload
-                case State3102.AWAITING_MSG_PAYLOAD:
+                case 2:
                     assert partial_msg is not None, "pending_msg is None"
                     if len(self._data_received) >= expected_total_size + CRLF_SIZE:
                         partial_msg.payload = self._data_received[:expected_total_size]
@@ -320,7 +308,7 @@ class Parser310:
                             expected_total_size + CRLF_SIZE + 1 :
                         ]
                         self._events_received.append(partial_msg)
-                        state = State3102.AWAITING_CONTROL_LINE
+                        state = AWAITING_CONTROL_LINE
                         continue
                     else:
                         yield None

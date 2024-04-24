@@ -10,18 +10,8 @@ from typing import Protocol
 class ProtocolError(Exception):
     """Protocol error."""
 
-    def __init__(self, invalid_byte: int, bad_value: bytearray) -> None:
-        self.bad_value = bad_value
-        self.invalid_byte = invalid_byte
-        super().__init__(
-            f"unexpected byte: {bytes([invalid_byte])} (pending: {bad_value})"
-        )
-
-
-class State3102(IntEnum):
-    AWAITING_CONTROL_LINE = 0
-    AWAITING_MSG_PAYLOAD = 1
-    AWAITING_HMSG_PAYLOAD = 2
+    def __init__(self) -> None:
+        super().__init__("nats protocol error")
 
 
 class Operation(IntEnum):
