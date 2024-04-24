@@ -21,10 +21,11 @@ from .common import (
 )
 
 STOP_HEADER = bytearray(b"\r\n\r\n")
-PING_OP = bytearray(b"PING")
-PONG_OP = bytearray(b"PONG")
-PING_OR_PONG_LEN = len(PING_OP)
-PING_OR_PONG_OP_LEN = PING_OR_PONG_LEN + CRLF_SIZE
+PING_OP = bytearray(b"PING\r\n")
+PONG_OP = bytearray(b"PONG\r\n")
+OK_OP = bytearray(b"+OK\r\n")
+OK_OP_LEN = len(OK_OP)
+PING_OR_PONG_OP_LEN = len(PING_OP)
 
 AWAITING_CONTROL_LINE = 0
 AWAITING_MSG_PAYLOAD = 1
@@ -200,9 +201,9 @@ class Parser300:
                 elif next_byte == 80:  # "P"
                     # Fast path for PING or PONG
                     if len(self._data_received) >= PING_OR_PONG_OP_LEN:
-                        if self._data_received[:PING_OR_PONG_LEN] == PING_OP:
+                        if self._data_received[:PING_OR_PONG_OP_LEN] == PING_OP:
                             self._events_received.append(PING_EVENT)
-                        elif self._data_received[:PING_OR_PONG_LEN] == PONG_OP:
+                        elif self._data_received[:PING_OR_PONG_OP_LEN] == PONG_OP:
                             self._events_received.append(PONG_EVENT)
                         else:
                             raise ProtocolError()
@@ -227,12 +228,12 @@ class Parser300:
                     self._data_received = self._data_received[end + 3 :]
                     continue
                 elif next_byte == 43:  # "+"
-                    try:
-                        end = self._data_received.index(CRLF)
-                    except ValueError:
+                    if len(self._data_received) < 5:
                         yield None
                         continue
-                    self._data_received = self._data_received[end + 3 :]
+                    if self._data_received[:5] != OK_OP:
+                        raise ProtocolError()
+                    self._data_received = self._data_received[OK_OP_LEN + 1 :]
                     self._events_received.append(OK_EVENT)
                     continue
                 elif next_byte == 45:  # "-"

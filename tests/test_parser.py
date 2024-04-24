@@ -94,8 +94,13 @@ def make_server_info(
     [Backend.PARSER_300, Backend.PARSER_310, Backend.PARSER_RE],
 )
 class TestParserBasic:
+    def skip_if(self, backend: str, reason: str) -> None:
+        if self.backend == backend:
+            pytest.skip(reason)
+
     @pytest.fixture(autouse=True)
     def setup(self, backend: Backend) -> None:
+        self.backend = backend
         if sys.version_info < (3, 10) and backend == Backend.PARSER_310:
             pytest.skip("Parser 3.10 is not available in this Python version")
         self.parser = make_parser(backend)
@@ -236,7 +241,25 @@ class TestParserBasic:
             ),
         ]
 
-    @pytest.mark.parametrize("data", [[b"MSG the.subject 1234 12\r\nhello world!\r\n"]])
+    @pytest.mark.parametrize(
+        "data",
+        [
+            [b"MSG the.subject 1234 12\r\nhello world!\r\n"],
+            [b"MSG the.subject 1234 12", b"\r\n", b"hello world!\r\n"],
+            [b"MSG the.subject 1234 12\r", b"\n", b"hello world!\r\n"],
+            [b"MSG the.subject 1234 12", b"\r", b"\n", b"hello ", b"world!\r", b"\n"],
+            [
+                b"M",
+                b"SG the",
+                b".subject 12",
+                b"34 12",
+                b"\r",
+                b"\n",
+                b"hello ",
+                b"world!\r\n",
+            ],
+        ],
+    )
     def test_parse_msg(self, data: list[bytes]):
         for chunk in data:
             self.parser.parse(chunk)
@@ -601,7 +624,210 @@ class TestParserBasic:
             ErrorEvent(message="the other error message"),
         ]
 
-    def test_parse_invalid(self):
+    def test_error_invalid_string(self):
         with pytest.raises(ProtocolError) as exc:
             self.parser.parse(b"invalid\r\n")
+        assert exc.match("nats protocol error")
+
+    def test_error_invalid_pongg(self):
+        with pytest.raises(ProtocolError) as exc:
+            self.parser.parse(b"PONGG\r\n")
+        assert exc.match("nats protocol error")
+
+    def test_error_invalid_pingg(self):
+        with pytest.raises(ProtocolError) as exc:
+            self.parser.parse(b"PINGG\r\n")
+        assert exc.match("nats protocol error")
+
+    def test_error_invalid_okk(self):
+        with pytest.raises(ProtocolError) as exc:
+            self.parser.parse(b"+OKK\r\n")
+        assert exc.match("nats protocol error")
+
+    def test_error_invalid_errr(self):
+        with pytest.raises(ProtocolError) as exc:
+            # Missing "-" character
+            self.parser.parse(b"-ERRR 'the error message'\r\n")
+        assert exc.match("nats protocol error")
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            b"-ERR the error message\r\n",
+            b"-ERR 'the error message\r\n",
+            b"-ERR the error message'\r\n",
+        ],
+    )
+    def test_error_invalid_err_without_quote(self, data: bytes):
+        with pytest.raises(ProtocolError) as exc:
+            self.parser.parse(data)
+        assert exc.match("nats protocol error")
+
+    def test_error_invalid_msgg(self):
+        with pytest.raises(ProtocolError) as exc:
+            self.parser.parse(b"MSGG the.subject 1234 0\r\n\r\n")
+        assert exc.match("nats protocol error")
+
+    def test_error_invalid_msg_without_arg(self):
+        with pytest.raises(ProtocolError) as exc:
+            self.parser.parse(b"MSG\r\n")
+        assert exc.match("nats protocol error")
+
+    def test_error_invalid_msg_with_empty_arg(self):
+        with pytest.raises(ProtocolError) as exc:
+            self.parser.parse(b"MSG \r\n")
+        assert exc.match("nats protocol error")
+
+    def test_error_invalid_hmsg_without_arg(self):
+        with pytest.raises(ProtocolError) as exc:
+            self.parser.parse(b"HMSG\r\n")
+        assert exc.match("nats protocol error")
+
+    def test_error_invalid_hmsg_with_empty_arg(self):
+        with pytest.raises(ProtocolError) as exc:
+            self.parser.parse(b"HMSG \r\n")
+        assert exc.match("nats protocol error")
+
+    def test_error_invalid_msg_sid(self):
+        with pytest.raises(ProtocolError) as exc:
+            self.parser.parse(b"MSG the.subject 1234a 0\r\n\r\n")
+        assert exc.match("nats protocol error")
+
+    def test_error_invalid_msg_subject_with_space(self):
+        with pytest.raises(ProtocolError) as exc:
+            self.parser.parse(b"MSG the subject 1234 0\r\n\r\n")
+        assert exc.match("nats protocol error")
+
+    def test_error_invalid_msg_reply_subject_with_space(self):
+        with pytest.raises(ProtocolError) as exc:
+            self.parser.parse(b"MSG the.subject 1234 the reply.subject 0\r\n\r\n")
+        assert exc.match("nats protocol error")
+
+    def test_error_invalid_msg_size(self):
+        with pytest.raises(ProtocolError) as exc:
+            self.parser.parse(b"MSG the.subject 1234 0a\r\n\r\n")
+        assert exc.match("nats protocol error")
+
+    def test_error_invalid_hmsgg(self):
+        with pytest.raises(ProtocolError) as exc:
+            self.parser.parse(b"HMSGG the.subject 1234 0 0\r\n\r\n\r\n")
+        assert exc.match("nats protocol error")
+
+    def test_error_invalid_hmsg_sid(self):
+        with pytest.raises(ProtocolError) as exc:
+            self.parser.parse(b"HMSG the.subject 1234a 0 0\r\n\r\n\r\n")
+        assert exc.match("nats protocol error")
+
+    def test_error_invalid_hmsg_subject_with_space(self):
+        with pytest.raises(ProtocolError) as exc:
+            self.parser.parse(b"HMSG the subject 1234 0 0\r\n\r\n\r\n")
+        assert exc.match("nats protocol error")
+
+    def test_error_invalid_hmsg_reply_subject_with_space(self):
+        with pytest.raises(ProtocolError) as exc:
+            self.parser.parse(
+                b"HMSG the.subject 1234 the reply.subject 0 0\r\n\r\n\r\n"
+            )
+        assert exc.match("nats protocol error")
+
+    def test_error_invalid_hmsg_header_size(self):
+        with pytest.raises(ProtocolError) as exc:
+            self.parser.parse(b"HMSG the.subject 1234 0a 0\r\n\r\n\r\n")
+        assert exc.match("nats protocol error")
+
+    def test_error_invalid_hmsg_size(self):
+        with pytest.raises(ProtocolError) as exc:
+            self.parser.parse(b"HMSG the.subject 1234 0 0a\r\n\r\n\r\n")
+        assert exc.match("nats protocol error")
+
+    def test_error_invalid_hmsg_error_end(self):
+        self.skip_if(
+            Backend.PARSER_RE, "Parser RE does not check for invalid header end"
+        )
+        with pytest.raises(ProtocolError) as exc:
+            self.parser.parse(b"HMSG the.subject 1234 5 5\r\n10000\r\n")
+        assert exc.match("nats protocol error")
+
+    def test_error_invalid_empty_hmsg_error_end(self):
+        self.skip_if(
+            Backend.PARSER_RE, "Parser RE does not check for invalid header end"
+        )
+        with pytest.raises(ProtocolError) as exc:
+            self.parser.parse(b"HMSG the.subject 1234 4 4\r\n0000\r\n")
+        assert exc.match("nats protocol error")
+
+    @pytest.mark.parametrize(
+        "letter",
+        [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g",
+            "h",
+            "i",
+            "j",
+            "k",
+            "l",
+            "m",
+            "n",
+            "o",
+            "p",
+            "q",
+            "r",
+            "s",
+            "t",
+            "u",
+            "v",
+            "w",
+            "x",
+            "y",
+            "z",
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "G",
+            "J",
+            "K",
+            "L",
+            "N",
+            "O",
+            "Q",
+            "R",
+            "S",
+            "T",
+            "U",
+            "V",
+            "W",
+            "X",
+            "Y",
+            "Z",
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "*",
+            ">",
+            "\t",
+            " ",
+            "\n",
+            "\r",
+            "{",
+        ],
+    )
+    def test_error_invalid_start(self, letter: str):
+        self.skip_if(Backend.PARSER_RE, "Parser RE does not check for invalid letters")
+        with pytest.raises(ProtocolError) as exc:
+            self.parser.parse(letter.encode())
         assert exc.match("nats protocol error")
