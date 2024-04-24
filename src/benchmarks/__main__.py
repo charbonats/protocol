@@ -21,7 +21,7 @@ def main():
         "--messages", "-n", type=int, default=50_000, help="Number of messages"
     )
     parser.add_argument(
-        "--repeat", "-r", type=int, default=7, help="Number of repetitions"
+        "--repeat", "-r", type=int, default=1, help="Number of repetitions"
     )
     parser.add_argument(
         "--scenario", "-s", type=str, default="ping_pong", help="Benchmark scenario"

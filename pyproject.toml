@@ -80,18 +80,27 @@ __test = "coverage run --rcfile=pyproject.toml -m pytest -vvv"
 __coverage-html = "coverage html"
 __install-project = "rye sync --no-lock --force"
 __bench_ping_pong = { chain = [
+    "__bench_ping_pong_300",
     "__bench_ping_pong_310",
     "__bench_ping_pong_re",
 ] }
-__bench_msg_hmsg = { chain = ["__bench_msg_hmsg_310", "__bench_msg_hmsg_re"] }
+__bench_msg_hmsg = { chain = [
+    "__bench_msg_hmsg_300",
+    "__bench_msg_hmsg_310",
+    "__bench_msg_hmsg_re",
+] }
 __bench_msg_ping_pong_msg = { chain = [
+    "__bench_msg_ping_pong_msg_300",
     "__bench_msg_ping_pong_msg_310",
     "__bench_msg_ping_pong_msg_re",
 ] }
+__bench_ping_pong_300 = "python -O -m benchmarks -s ping_pong -o bench -p 300"
 __bench_ping_pong_310 = "python -O -m benchmarks -s ping_pong -o bench -p 310"
 __bench_ping_pong_re = "python -O -m benchmarks -s ping_pong -o bench -p re"
+__bench_msg_hmsg_300 = "python -O -m benchmarks -s msg_hmsg -o bench -p 300"
 __bench_msg_hmsg_310 = "python -O -m benchmarks -s msg_hmsg -o bench -p 310"
 __bench_msg_hmsg_re = "python -O -m benchmarks -s msg_hmsg -o bench -p re"
+__bench_msg_ping_pong_msg_300 = "python -O -m benchmarks -s msg_ping_pong_msg -o bench -p 300"
 __bench_msg_ping_pong_msg_310 = "python -O -m benchmarks -s msg_ping_pong_msg -o bench -p 310"
 __bench_msg_ping_pong_msg_re = "python -O -m benchmarks -s msg_ping_pong_msg -o bench -p re"
 

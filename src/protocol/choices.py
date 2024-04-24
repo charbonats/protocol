@@ -3,6 +3,7 @@ from enum import Enum
 from typing import Literal
 
 from .common import Parser
+from .parser_300 import Parser300
 from .parser_re import ParserRE
 
 if sys.version_info[1] >= 10:
@@ -25,17 +26,20 @@ else:
 
 
 class Backend(str, Enum):
+    PARSER_300 = "300"
     PARSER_310 = "310"
     PARSER_RE = "re"
     DEFAULT = "default"
 
 
 def make_parser(
-    backend: Backend | Literal["310", "re", "default"] = Backend.DEFAULT,
+    backend: Backend | Literal["300", "310", "re", "default"] = Backend.DEFAULT,
 ) -> Parser:
     parser_type: type[Parser]
     if backend == Backend.DEFAULT:
         parser_type = __default_parser()
+    elif backend == Backend.PARSER_300:
+        parser_type = Parser300
     elif backend == Backend.PARSER_310:
         parser_type = __parser_310()
     elif backend == Backend.PARSER_RE:

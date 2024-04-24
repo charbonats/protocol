@@ -102,7 +102,7 @@ def make_server_info(
 
 @pytest.mark.parametrize(
     "backend",
-    [Backend.PARSER_310, Backend.PARSER_RE],
+    [Backend.PARSER_300, Backend.PARSER_310, Backend.PARSER_RE],
 )
 class TestParserBasic:
     @pytest.fixture(autouse=True)
