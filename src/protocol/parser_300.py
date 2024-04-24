@@ -83,7 +83,7 @@ class Parser300:
                     if len(args) == 4:
                         subject, raw_sid, reply_to, raw_total_size = args
                     elif len(args) == 3:
-                        reply_to = b""
+                        reply_to = bytearray()
                         subject, raw_sid, raw_total_size = args
                     else:
                         raise ProtocolError(next_byte, self._data_received)

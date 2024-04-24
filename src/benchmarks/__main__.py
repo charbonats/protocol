@@ -49,15 +49,19 @@ def main():
         print(f"Allowed scenarios: {[s.value for s in Scenario]}", file=sys.stderr)
         sys.exit(1)
     if scenario == Scenario.msg_ok_ping_msg_pong_msg_ok:
+        factor = 7
         opts = {"message_size": 1024, "subject_size": 64}
         data = data_factory.msg_ping_pong_msg(args.messages, **opts)
     elif scenario == Scenario.msg_ping_pong_msg:
+        factor = 4
         opts = {"message_size": 1024, "subject_size": 64}
         data = data_factory.msg_ping_pong_msg(args.messages, **opts)
     elif scenario == Scenario.ping_pong:
+        factor = 2
         opts = {}
         data = data_factory.ping_pong(args.messages)
     elif scenario == Scenario.msg_hmsg:
+        factor = 2
         opts = {"message_size": 1024, "subject_size": 64, "header_size": 64}
         data = data_factory.msg_hmsg(args.messages, **opts)
     else:
@@ -86,10 +90,10 @@ def main():
                 timer.end()
         results = iteration.result()
         print(
-            f"[{backend}] {scenario} - iteration {idx+1}/{args.repeat} - {results.p50} ns/op"
+            f"[{backend}] {scenario} - iteration {idx+1}/{args.repeat} - {int(results.p50 / factor)} ns/op"
         )
     results = report.results()
-    print(f"[{backend}] {scenario} 🕑 {results.score} ns/op")
+    print(f"[{backend}] {scenario} 🕑 {int(results.score/ factor)} ns/op")
     # Dump the profile
     report.write_to_file()
 
