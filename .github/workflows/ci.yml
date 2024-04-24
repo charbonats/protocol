@@ -1,0 +1,104 @@
+name: Continuous Integration
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+
+  format:
+    name: Check code format (rye)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the latest version of rye
+        uses: eifinger/setup-rye@v2
+        with:
+          enable-cache: true
+          cache-prefix: 'ci'
+
+      - name: Run linting
+        run: rye run formatcheck
+
+  lint:
+    name: Check code quality (rye)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the latest version of rye
+        uses: eifinger/setup-rye@v2
+        with:
+          enable-cache: true
+          cache-prefix: 'ci'
+
+      - name: Run linting
+        run: rye run lint
+
+  benchmark:
+    name: Benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the latest version of rye
+        uses: eifinger/setup-rye@v2
+        with:
+          enable-cache: true
+          cache-prefix: 'ci'
+
+      - name: Run benchmarks
+        run: rye run bench
+
+  test:
+    name: Tests (pytest)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Uses the same action as rye
+      # See: https://github.com/astral-sh/rye/blob/main/.github/workflows/python-lint.yml
+      - name: Install the latest version of rye
+        uses: eifinger/setup-rye@v2
+        with:
+          enable-cache: true
+          cache-prefix: 'ci-${{ matrix.python-version }}'
+
+      - name: Override python version required by project
+        run: |
+          echo "${{ matrix.python-version }}" > .python-version
+          sed -i -e 's/pythonVersion = "3.8"/pythonVersion = "${{ matrix.python-version }}"/g' pyproject.toml
+
+      - name: Run pytest
+        run: rye run test
+
+  typecheck:
+    name: Typecheck (pyright)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Uses the same action as rye
+      # See: https://github.com/astral-sh/rye/blob/main/.github/workflows/python-lint.yml
+      - name: Install the latest version of rye
+        uses: eifinger/setup-rye@v2
+        with:
+          enable-cache: true
+          cache-prefix: 'ci-${{ matrix.python-version }}'
+
+      - name: Override python version required by project
+        run: |
+          echo "${{ matrix.python-version }}" > .python-version
+          sed -i -e 's/pythonVersion = "3.8"/pythonVersion = "${{ matrix.python-version }}"/g' pyproject.toml
+
+      - name: Run validation
+        run: rye run typecheck
