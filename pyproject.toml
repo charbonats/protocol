@@ -40,7 +40,7 @@ reportUnnecessaryTypeIgnoreComment = "warning"
 
 [tool.rye.scripts]
 # Run test with coverage
-test = { chain = ["__test", "__coverage-html"] }
+test = { chain = ["__test", "__coverage-html", "__coverage-term"] }
 # View coverage report
 htmlcov = "python -m http.server 8080 --directory coverage-report"
 # Automate pre-commit
@@ -87,6 +87,7 @@ __clear_dist = "rm -rf ./dist"
 __test_without_coverage = "pytest -vvv"
 __test = "coverage run --rcfile=pyproject.toml -m pytest -vvv"
 __coverage-html = "coverage html"
+__coverage-term = "coverage report"
 __install-project = "rye sync --no-lock --force"
 __bench_ping_pong = { chain = [
     "__bench_ping_pong_300",
