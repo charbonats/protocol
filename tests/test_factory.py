@@ -19,9 +19,9 @@ def test_make_parser_300() -> None:
 
 def test_make_parser_310() -> None:
     if sys.version_info < (3, 10):
-        with pytest.raises(ValueError) as exc:
+        with pytest.raises(RuntimeError) as exc:
             make_parser(Backend.PARSER_310)
-        assert exc.match("Python 3.10 or later is required")
+        assert exc.match("python 3.10 or later is required")
         return
     parser = make_parser(Backend.PARSER_310)
     assert parser is not None

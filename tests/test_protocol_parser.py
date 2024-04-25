@@ -962,6 +962,8 @@ class TestParserRepr:
         assert repr(parser) == "<nats protocol parser backend=300>"
 
     def test_parser_310_repr(self) -> None:
+        if sys.version_info < (3, 10):
+            pytest.skip("python 3.10 or later is required")
         parser = make_parser(Backend.PARSER_310)
         assert repr(parser) == "<nats protocol parser backend=310>"
 

@@ -23,7 +23,7 @@ if sys.version_info[1] >= 10:
 else:
 
     def __parser_310() -> type[Parser]:
-        raise ValueError("PARSER_310 is not supported on Python < 3.10")
+        raise RuntimeError("python 3.10 or later is required")
 
 
 class Backend(str, Enum):
