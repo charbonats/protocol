@@ -13,6 +13,7 @@ from protocol.common import (
     HMsgEvent,
     InfoEvent,
     MsgEvent,
+    ParserClosedError,
     ProtocolError,
     Version,
 )
@@ -624,137 +625,230 @@ class TestParserBasic:
             ErrorEvent(message="the other error message"),
         ]
 
-    def test_error_invalid_string(self):
+    @pytest.mark.parametrize("data", [[b"invalid\r\n"]])
+    def test_error_invalid_string(self, data: list[bytes]):
         with pytest.raises(ProtocolError) as exc:
-            self.parser.parse(b"invalid\r\n")
-        assert exc.match("nats protocol error")
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
 
-    def test_error_invalid_pongg(self):
+    @pytest.mark.parametrize("data", [[b"PONGG\r\n"]])
+    def test_error_invalid_pongg(self, data: list[bytes]):
         with pytest.raises(ProtocolError) as exc:
-            self.parser.parse(b"PONGG\r\n")
-        assert exc.match("nats protocol error")
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
 
-    def test_error_invalid_pingg(self):
+    @pytest.mark.parametrize("data", [[b"PINGG\r\n"]])
+    def test_error_invalid_pingg(self, data: list[bytes]):
         with pytest.raises(ProtocolError) as exc:
-            self.parser.parse(b"PINGG\r\n")
-        assert exc.match("nats protocol error")
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
 
-    def test_error_invalid_okk(self):
+    @pytest.mark.parametrize("data", [[b"+OKK\r\n"]])
+    def test_error_invalid_okk(self, data: list[bytes]):
         with pytest.raises(ProtocolError) as exc:
-            self.parser.parse(b"+OKK\r\n")
-        assert exc.match("nats protocol error")
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
 
-    def test_error_invalid_errr(self):
+    @pytest.mark.parametrize("data", [[b"-ERRR 'the error message'\r\n"]])
+    def test_error_invalid_errr(self, data: list[bytes]):
         with pytest.raises(ProtocolError) as exc:
-            # Missing "-" character
-            self.parser.parse(b"-ERRR 'the error message'\r\n")
-        assert exc.match("nats protocol error")
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
 
     @pytest.mark.parametrize(
         "data",
         [
-            b"-ERR the error message\r\n",
-            b"-ERR 'the error message\r\n",
-            b"-ERR the error message'\r\n",
+            [b"-ERR the error message\r\n"],
+            [b"-ERR 'the error message\r\n"],
+            [b"-ERR the error message'\r\n"],
         ],
     )
-    def test_error_invalid_err_without_quote(self, data: bytes):
+    def test_error_invalid_err_without_quote(self, data: list[bytes]):
         with pytest.raises(ProtocolError) as exc:
-            self.parser.parse(data)
-        assert exc.match("nats protocol error")
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
 
-    def test_error_invalid_msgg(self):
+    @pytest.mark.parametrize("data", [[b"MSGG the.subject 1234 0\r\n\r\n"]])
+    def test_error_invalid_msgg(self, data: list[bytes]):
         with pytest.raises(ProtocolError) as exc:
-            self.parser.parse(b"MSGG the.subject 1234 0\r\n\r\n")
-        assert exc.match("nats protocol error")
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
 
-    def test_error_invalid_msg_without_arg(self):
+    @pytest.mark.parametrize("data", [[b"MSG\r\n"]])
+    def test_error_invalid_msg_without_arg(self, data: list[bytes]):
         with pytest.raises(ProtocolError) as exc:
-            self.parser.parse(b"MSG\r\n")
-        assert exc.match("nats protocol error")
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
 
-    def test_error_invalid_msg_with_empty_arg(self):
+    @pytest.mark.parametrize("data", [[b"MSG \r\n"]])
+    def test_error_invalid_msg_with_empty_arg(self, data: list[bytes]):
         with pytest.raises(ProtocolError) as exc:
-            self.parser.parse(b"MSG \r\n")
-        assert exc.match("nats protocol error")
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
 
-    def test_error_invalid_hmsg_without_arg(self):
+    @pytest.mark.parametrize("data", [[b"HMSG\r\n"]])
+    def test_error_invalid_hmsg_without_arg(self, data: list[bytes]):
         with pytest.raises(ProtocolError) as exc:
-            self.parser.parse(b"HMSG\r\n")
-        assert exc.match("nats protocol error")
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
 
-    def test_error_invalid_hmsg_with_empty_arg(self):
+    @pytest.mark.parametrize("data", [[b"HMSG \r\n"]])
+    def test_error_invalid_hmsg_with_empty_arg(self, data: list[bytes]):
         with pytest.raises(ProtocolError) as exc:
-            self.parser.parse(b"HMSG \r\n")
-        assert exc.match("nats protocol error")
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
 
-    def test_error_invalid_msg_sid(self):
+    @pytest.mark.parametrize("data", [[b"MSG the.subject 1234a 0\r\n\r\n"]])
+    def test_error_invalid_msg_sid(self, data: list[bytes]):
         with pytest.raises(ProtocolError) as exc:
-            self.parser.parse(b"MSG the.subject 1234a 0\r\n\r\n")
-        assert exc.match("nats protocol error")
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
 
-    def test_error_invalid_msg_subject_with_space(self):
+    @pytest.mark.parametrize("data", [[b"MSG the subject 1234 0\r\n\r\n"]])
+    def test_error_invalid_msg_subject_with_space(self, data: list[bytes]):
         with pytest.raises(ProtocolError) as exc:
-            self.parser.parse(b"MSG the subject 1234 0\r\n\r\n")
-        assert exc.match("nats protocol error")
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
 
-    def test_error_invalid_msg_reply_subject_with_space(self):
+    @pytest.mark.parametrize(
+        "data", [[b"MSG the.subject 1234 the reply.subject 0\r\n\r\n"]]
+    )
+    def test_error_invalid_msg_reply_subject_with_space(self, data: list[bytes]):
         with pytest.raises(ProtocolError) as exc:
-            self.parser.parse(b"MSG the.subject 1234 the reply.subject 0\r\n\r\n")
-        assert exc.match("nats protocol error")
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
 
-    def test_error_invalid_msg_size(self):
+    @pytest.mark.parametrize("data", [[b"MSG the.subject 1234 0a\r\n\r\n"]])
+    def test_error_invalid_msg_size(self, data: list[bytes]):
         with pytest.raises(ProtocolError) as exc:
-            self.parser.parse(b"MSG the.subject 1234 0a\r\n\r\n")
-        assert exc.match("nats protocol error")
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
 
-    def test_error_invalid_hmsgg(self):
+    @pytest.mark.parametrize(
+        "data",
+        [
+            [b"HMSGG the.subject 1234 0 0\r\n\r\n\r\n"],
+            [b"HMSGG the.subjec", b"t 1234 0 0\r\n\r\n\r\n"],
+        ],
+    )
+    def test_error_invalid_hmsgg(self, data: list[bytes]):
         with pytest.raises(ProtocolError) as exc:
-            self.parser.parse(b"HMSGG the.subject 1234 0 0\r\n\r\n\r\n")
-        assert exc.match("nats protocol error")
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
 
-    def test_error_invalid_hmsg_sid(self):
+    @pytest.mark.parametrize(
+        "data",
+        [
+            [b"HMSG the.subject 1234a 0 0\r\n\r\n\r\n"],
+            [b"HMSG the.subject 123", b"4a 0 0\r\n\r\n\r\n"],
+        ],
+    )
+    def test_error_invalid_hmsg_sid(self, data: list[bytes]):
         with pytest.raises(ProtocolError) as exc:
-            self.parser.parse(b"HMSG the.subject 1234a 0 0\r\n\r\n\r\n")
-        assert exc.match("nats protocol error")
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
 
-    def test_error_invalid_hmsg_subject_with_space(self):
+    @pytest.mark.parametrize(
+        "data",
+        [
+            [b"HMSG the subject 1234 0 0\r\n\r\n\r\n"],
+            [b"HMSG th", b"e subject 1234 0 0\r\n\r\n\r\n"],
+        ],
+    )
+    def test_error_invalid_hmsg_subject_with_space(self, data: list[bytes]):
         with pytest.raises(ProtocolError) as exc:
-            self.parser.parse(b"HMSG the subject 1234 0 0\r\n\r\n\r\n")
-        assert exc.match("nats protocol error")
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
 
-    def test_error_invalid_hmsg_reply_subject_with_space(self):
+    @pytest.mark.parametrize(
+        "data",
+        [
+            [b"HMSG the.subject 1234 the reply.subject 0 0\r\n\r\n\r\n"],
+            [b"HMS", b"G the.subject 1234 the reply.subject 0 0\r\n\r\n\r\n"],
+        ],
+    )
+    def test_error_invalid_hmsg_reply_subject_with_space(self, data: list[bytes]):
         with pytest.raises(ProtocolError) as exc:
-            self.parser.parse(
-                b"HMSG the.subject 1234 the reply.subject 0 0\r\n\r\n\r\n"
-            )
-        assert exc.match("nats protocol error")
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
 
-    def test_error_invalid_hmsg_header_size(self):
+    @pytest.mark.parametrize(
+        "data",
+        [
+            [b"HMSG the.subject 1234 0a 0\r\n\r\n\r\n"],
+            [b"HMSG the.subject 1234 0", b"a 0\r\n\r\n\r\n"],
+        ],
+    )
+    def test_error_invalid_hmsg_header_size(self, data: list[bytes]):
         with pytest.raises(ProtocolError) as exc:
-            self.parser.parse(b"HMSG the.subject 1234 0a 0\r\n\r\n\r\n")
-        assert exc.match("nats protocol error")
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
 
-    def test_error_invalid_hmsg_size(self):
+    @pytest.mark.parametrize(
+        "data",
+        [
+            [b"HMSG the.subject 1234 0 0a\r\n\r\n\r\n"],
+            [b"HMSG the.subject 1234 0 ", b"0a\r\n\r\n\r\n"],
+        ],
+    )
+    def test_error_invalid_hmsg_size(self, data: list[bytes]):
         with pytest.raises(ProtocolError) as exc:
-            self.parser.parse(b"HMSG the.subject 1234 0 0a\r\n\r\n\r\n")
-        assert exc.match("nats protocol error")
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
 
-    def test_error_invalid_hmsg_error_end(self):
+    @pytest.mark.parametrize(
+        "data",
+        [
+            [b"HMSG the.subject 1234 5 5\r\n10000\r\n"],
+            [b"HMSG the.subject 1", b"234 5 5\r\n10000\r\n"],
+        ],
+    )
+    def test_error_invalid_hmsg_error_end(self, data: list[bytes]):
         self.skip_if(
             Backend.PARSER_RE, "Parser RE does not check for invalid header end"
         )
         with pytest.raises(ProtocolError) as exc:
-            self.parser.parse(b"HMSG the.subject 1234 5 5\r\n10000\r\n")
-        assert exc.match("nats protocol error")
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
 
-    def test_error_invalid_empty_hmsg_error_end(self):
+    @pytest.mark.parametrize(
+        "data",
+        [
+            [b"HMSG the.subject 1234 4 4\r\n0000\r\n"],
+            [b"HMSG", b" the.subject 1234 4 4\r\n0000\r\n"],
+            [b"HMSG", b" the.subject 1234 4 4\r\n00", b"00\r\n"],
+        ],
+    )
+    def test_error_invalid_empty_hmsg_error_end(self, data: list[bytes]):
         self.skip_if(
             Backend.PARSER_RE, "Parser RE does not check for invalid header end"
         )
         with pytest.raises(ProtocolError) as exc:
-            self.parser.parse(b"HMSG the.subject 1234 4 4\r\n0000\r\n")
-        assert exc.match("nats protocol error")
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
 
     @pytest.mark.parametrize(
         "letter",
@@ -830,4 +924,47 @@ class TestParserBasic:
         self.skip_if(Backend.PARSER_RE, "Parser RE does not check for invalid letters")
         with pytest.raises(ProtocolError) as exc:
             self.parser.parse(letter.encode())
-        assert exc.match("nats protocol error")
+        assert exc.match("nats: protocol error")
+
+    @pytest.mark.parametrize("data", [[b"INFO\r\n"]])
+    def test_error_invalid_info(self, data: list[bytes]):
+        with pytest.raises(ProtocolError) as exc:
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
+
+    @pytest.mark.parametrize("data", [[b"INFO \r\n"]])
+    def test_error_invalid_info_without_arg(self, data: list[bytes]):
+        with pytest.raises(ProtocolError) as exc:
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
+
+    @pytest.mark.parametrize("data", [[b"INFO  \r\n"], [b"INFO ", b" \r\n"]])
+    def test_error_invalid_info_with_empty_arg(self, data: list[bytes]):
+        with pytest.raises(ProtocolError) as exc:
+            for chunk in data:
+                self.parser.parse(chunk)
+        assert exc.match("nats: protocol error")
+
+    def test_close_parser(self) -> None:
+        self.parser.parse(b"+OK\r\n")
+        assert self.parser.events_received() == [OK_EVENT]
+        self.parser.close()
+        with pytest.raises(ParserClosedError) as exc:
+            self.parser.parse(b"+OK\r\n")
+        assert exc.match("nats: parser closed")
+
+
+class TestParserRepr:
+    def test_parser_300_repr(self) -> None:
+        parser = make_parser(Backend.PARSER_300)
+        assert repr(parser) == "<nats protocol parser backend=300>"
+
+    def test_parser_310_repr(self) -> None:
+        parser = make_parser(Backend.PARSER_310)
+        assert repr(parser) == "<nats protocol parser backend=310>"
+
+    def test_parser_re_repr(self) -> None:
+        parser = make_parser(Backend.PARSER_RE)
+        assert repr(parser) == "<nats protocol parser backend=re>"

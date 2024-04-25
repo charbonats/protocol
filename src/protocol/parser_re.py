@@ -29,6 +29,7 @@ from .common import (
     Event,
     HMsgEvent,
     MsgEvent,
+    ParserClosedError,
     ProtocolError,
     parse_info,
 )
@@ -102,16 +103,20 @@ class ParserRE:
         self.reset()
 
     def __repr__(self) -> str:
-        return f"<nats protocol parser state={self._state}>"
+        return "<nats protocol parser backend=re>"
 
     def reset(self) -> None:
         self.buf = bytearray()
+        self._closed = False
         self._state = AWAITING_CONTROL_LINE
         self.needed = 0
         self.header_needed = 0
         self.msg_arg: Dict[str, Any] = {}
         self._events: list[Event] = []
         self.__parser__ = self.__parse__()
+
+    def close(self) -> None:
+        self._closed = True
 
     def events_received(self) -> list[Event]:
         events = self._events
@@ -120,14 +125,17 @@ class ParserRE:
 
     def parse(self, data: bytes | bytearray) -> None:
         self.buf.extend(data)
-        self.__parser__.__next__()
+        try:
+            self.__parser__.__next__()
+        except StopIteration:
+            raise ParserClosedError()
 
     def __parse__(self):
         """
         Parses the wire protocol from NATS for the client
         and dispatches the subscription callbacks.
         """
-        while True:
+        while not self._closed:
             if not self.buf:
                 yield None
                 continue
@@ -214,7 +222,7 @@ class ParserRE:
                     yield None
                     continue
 
-            elif self._state == AWAITING_MSG_PAYLOAD:
+            else:
                 if len(self.buf) >= self.needed + CRLF_SIZE:
                     hdr = None
                     subject = self.msg_arg["subject"]

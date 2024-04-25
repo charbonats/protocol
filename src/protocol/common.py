@@ -11,7 +11,14 @@ class ProtocolError(Exception):
     """Protocol error."""
 
     def __init__(self) -> None:
-        super().__init__("nats protocol error")
+        super().__init__("nats: protocol error")
+
+
+class ParserClosedError(Exception):
+    """Parser closed error."""
+
+    def __init__(self) -> None:
+        super().__init__("nats: parser closed")
 
 
 class Operation(IntEnum):
@@ -27,10 +34,10 @@ class Operation(IntEnum):
 class Event:
     """NATS Protocol event."""
 
-    __slots__ = ["operation"]
+    __slots__ = ["kind"]
 
     def __init__(self, op: Operation) -> None:
-        self.operation = op
+        self.kind = op
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, type(self)):
@@ -40,13 +47,27 @@ class Event:
         )
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({', '.join(f'{slot}={getattr(self, slot)!r}' for slot in self.__slots__)})"
+        return f"Event(Operation.{self.kind.name})"
+
+
+class Parser(Protocol):
+    def close(self) -> None:
+        """Close the parser."""
+        raise NotImplementedError
+
+    def parse(self, data: bytes | bytearray) -> None:
+        """Parse the data."""
+        raise NotImplementedError
+
+    def events_received(self) -> list[Event]:
+        """Return the list of events received."""
+        raise NotImplementedError
 
 
 class OkEvent(Event):
     """NATS Protocol OK event."""
 
-    __slots__ = ["operation"]
+    __slots__ = ["kind"]
 
     def __init__(self) -> None:
         super().__init__(Operation.OK)
@@ -55,7 +76,7 @@ class OkEvent(Event):
 class PingEvent(Event):
     """NATS Protocol ping event."""
 
-    __slots__ = ["operation"]
+    __slots__ = ["kind"]
 
     def __init__(self) -> None:
         super().__init__(Operation.PING)
@@ -64,7 +85,7 @@ class PingEvent(Event):
 class PongEvent(Event):
     """NATS Protocol pong event."""
 
-    __slots__ = ["operation"]
+    __slots__ = ["kind"]
 
     def __init__(self) -> None:
         super().__init__(Operation.PONG)
@@ -73,17 +94,20 @@ class PongEvent(Event):
 class ErrorEvent(Event):
     """NATS Protocol error event."""
 
-    __slots__ = ["operation", "message"]
+    __slots__ = ["kind", "message"]
 
     def __init__(self, message: str) -> None:
         super().__init__(Operation.ERR)
         self.message = message
 
+    def __repr__(self) -> str:
+        return f"Event(Operation.{self.kind.name}, {repr(self.message)})"
+
 
 class MsgEvent(Event):
     """NATS Protocol message event."""
 
-    __slots__ = ["operation", "sid", "subject", "reply_to", "payload", "header"]
+    __slots__ = ["kind", "sid", "subject", "reply_to", "payload", "header"]
 
     def __init__(
         self,
@@ -103,7 +127,7 @@ class MsgEvent(Event):
 class HMsgEvent(Event):
     """NATS Protocol message event."""
 
-    __slots__ = ["operation", "sid", "subject", "reply_to", "payload", "header"]
+    __slots__ = ["kind", "sid", "subject", "reply_to", "payload", "header"]
 
     def __init__(
         self,
@@ -113,7 +137,7 @@ class HMsgEvent(Event):
         payload: bytearray,
         header: bytearray,
     ) -> None:
-        self.operation = Operation.HMSG
+        self.kind = Operation.HMSG
         self.sid = sid
         self.subject = subject
         self.reply_to = reply_to
@@ -136,12 +160,17 @@ class Version:
         self.patch = patch
         self.dev = dev
 
-    def as_string(self) -> str:
-        return f"{self.major}.{self.minor}.{self.patch}-{self.dev}"
+    def to_string(self) -> str:
+        if self.dev:
+            return f"{self.major}.{self.minor}.{self.patch}-{self.dev}"
+        return f"{self.major}.{self.minor}.{self.patch}"
+
+    def __repr__(self) -> str:
+        return f"Version({self.major}, {self.minor}, {self.patch}, {repr(self.dev)})"
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Version):
-            return False
+            raise TypeError(f"cannot compare version with type {type(other)}")
         return (
             self.major == other.major
             and self.minor == other.minor
@@ -149,26 +178,30 @@ class Version:
             and self.dev == other.dev
         )
 
+    def __lt__(self, other: "Version") -> bool:
+        if not isinstance(other, Version):  # pyright: ignore[reportUnnecessaryIsInstance]
+            raise TypeError(f"cannot compare version with type {type(other)}")
+        return (self.major, self.minor, self.patch, self.dev) < (
+            other.major,
+            other.minor,
+            other.patch,
+            other.dev,
+        )
+
     def __gt__(self, other: "Version") -> bool:
-        assert isinstance(
-            other, Version
-        ), f"cannot compare version with type {type(other)}"
-        if self.major > other.major:
-            return True
-        if self.major == other.major:
-            if self.minor > other.minor:
-                return True
-            if self.minor == other.minor:
-                if self.patch > other.patch:
-                    return True
-                if self.patch == other.patch:
-                    return self.dev > other.dev
-        return False
+        if not isinstance(other, Version):  # pyright: ignore[reportUnnecessaryIsInstance]
+            raise TypeError(f"cannot compare version with type {type(other)}")
+        return (self.major, self.minor, self.patch, self.dev) > (
+            other.major,
+            other.minor,
+            other.patch,
+            other.dev,
+        )
 
 
 class InfoEvent(Event):
     __slots__ = [
-        "operation",
+        "kind",
         "proto",
         "server_id",
         "server_name",
@@ -224,7 +257,7 @@ class InfoEvent(Event):
         domain: str | None,
         xkey: str | None,
     ) -> None:
-        self.operation = Operation.INFO
+        self.kind = Operation.INFO
         self.proto = proto
         self.server_id = server_id
         self.server_name = server_name
@@ -252,22 +285,11 @@ class InfoEvent(Event):
         self.xkey = xkey
 
 
-class Parser(Protocol):
-    def parse(self, data: bytes | bytearray) -> None: ...
-
-    def events_received(self) -> list[Event]: ...
-
-
-PING_EVENT = PingEvent()
-PONG_EVENT = PongEvent()
-OK_EVENT = OkEvent()
-
-CRLF = b"\r\n"
-CRLF_SIZE = len(CRLF)
-
-
 def parse_info(data: bytearray | bytes) -> InfoEvent:
-    raw_info = json.loads(data.decode())
+    try:
+        raw_info = json.loads(data.decode())
+    except ValueError:
+        raise ProtocolError()
     return InfoEvent(
         server_id=raw_info["server_id"],
         server_name=raw_info["server_name"],
@@ -299,15 +321,31 @@ def parse_info(data: bytearray | bytes) -> InfoEvent:
 
 def parse_version(version: str) -> Version:
     semver = Version(0, 0, 0, "")
+    if not version:
+        semver.dev = "unknown"
+        return semver
     v = version.split("-")
     if len(v) > 1:
         semver.dev = v[1]
     tokens = v[0].split(".")
     n = len(tokens)
-    if n > 1:
-        semver.major = int(tokens[0])
-    if n > 2:
-        semver.minor = int(tokens[1])
     if n > 3:
+        raise ValueError(f"invalid version: {version}")
+    elif n > 2:
+        semver.major = int(tokens[0])
+        semver.minor = int(tokens[1])
         semver.patch = int(tokens[2])
+    elif n > 1:
+        semver.major = int(tokens[0])
+        semver.minor = int(tokens[1])
+    else:
+        semver.major = int(tokens[0])
     return semver
+
+
+PING_EVENT = PingEvent()
+PONG_EVENT = PongEvent()
+OK_EVENT = OkEvent()
+
+CRLF = b"\r\n"
+CRLF_SIZE = len(CRLF)
